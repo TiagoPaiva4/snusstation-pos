@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { X, UserPlus } from 'lucide-react';
+import { X, UserPlus, Calendar } from 'lucide-react';
 
 export default function POS() {
   const [products, setProducts] = useState([]);
@@ -8,6 +8,9 @@ export default function POS() {
   const [cart, setCart] = useState([]);
   const [selectedClient, setSelectedClient] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Novo estado para a Data da Venda (Padrão: Hoje)
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Estados para o Modal de Novo Cliente
   const [showModal, setShowModal] = useState(false);
@@ -53,7 +56,6 @@ export default function POS() {
     if (error) {
       alert("Erro ao criar cliente: " + error.message);
     } else {
-      // Adiciona o novo cliente à lista local, seleciona-o e fecha o modal
       const createdClient = data[0];
       setClients([...clients, createdClient].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedClient(createdClient.id);
@@ -71,26 +73,38 @@ export default function POS() {
     const total = getTotal();
     const profit = getTotalProfit();
 
+    // Enviar a venda com a data selecionada (created_at)
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
-      .insert([{ client_id: selectedClient, total_amount: total, total_profit: profit }])
+      .insert([{ 
+        client_id: selectedClient, 
+        total_amount: total, 
+        total_profit: profit,
+        created_at: saleDate // Usa a data escolhida no input
+      }])
       .select();
 
-    if (saleError) return alert("Erro ao criar venda");
+    if (saleError) return alert("Erro ao criar venda: " + saleError.message);
 
     const saleId = saleData[0].id;
 
     for (const item of cart) {
       await supabase.from('sale_items').insert([{
-        sale_id: saleId, product_id: item.id, quantity: item.qty, unit_price: item.sell_price, unit_profit: item.sell_price - item.buy_price
+        sale_id: saleId, 
+        product_id: item.id, 
+        quantity: item.qty, 
+        unit_price: item.sell_price, 
+        unit_profit: item.sell_price - item.buy_price
       }]);
       
       const currentProduct = products.find(p => p.id === item.id);
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
 
-    alert("Venda realizada com sucesso!");
+    alert("Venda registada com sucesso!");
     setCart([]);
+    // Opcional: Resetar a data para hoje após a venda, ou manter a última escolhida
+    // setSaleDate(new Date().toISOString().split('T')[0]); 
     window.location.reload(); 
   };
 
@@ -133,6 +147,24 @@ export default function POS() {
       {/* Área do Carrinho */}
       <div className="cart-panel">
         <div className="client-section">
+          
+          {/* Nova Área de Data */}
+          <div style={{marginBottom: '15px'}}>
+            <h3 style={{marginTop: 0}}>Data da Venda</h3>
+            <div className="client-controls">
+              <div style={{position: 'relative', width: '100%'}}>
+                 <input 
+                    type="date" 
+                    value={saleDate} 
+                    onChange={e => setSaleDate(e.target.value)} 
+                    className="client-select" 
+                    style={{width: '100%', paddingLeft: '35px'}}
+                  />
+                  <Calendar size={18} style={{position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b'}} />
+              </div>
+            </div>
+          </div>
+
           <h3>Cliente</h3>
           <div className="client-controls">
             <select 
