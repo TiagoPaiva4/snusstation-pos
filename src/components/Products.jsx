@@ -4,15 +4,24 @@ import { supabase } from '../supabaseClient';
 export default function Products() {
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState({ name: '', brand: '', buy_price: '', sell_price: '', stock: '' });
-  const [image, setImage] = useState(null); // Estado para guardar o ficheiro da imagem
+  const [image, setImage] = useState(null);
   const [search, setSearch] = useState('');
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => { fetchProducts(); }, []);
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').order('name');
-    setProducts(data || []);
+    // Agora buscamos também os sale_items para contar as vendas
+    const { data, error } = await supabase
+      .from('products')
+      .select('*, sale_items(quantity)') 
+      .order('name');
+    
+    if (error) {
+      console.error("Erro ao buscar produtos:", error);
+    } else {
+      setProducts(data || []);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -21,7 +30,7 @@ export default function Products() {
 
     let imageUrl = null;
 
-    // 1. Upload da Imagem (se existir)
+    // 1. Upload da Imagem
     if (image) {
       const fileExt = image.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
@@ -32,12 +41,12 @@ export default function Products() {
         .upload(filePath, image);
 
       if (uploadError) {
+        console.error("Erro upload:", uploadError);
         alert('Erro no upload da imagem!');
         setUploading(false);
         return;
       }
 
-      // 2. Obter URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('product-images')
         .getPublicUrl(filePath);
@@ -45,9 +54,8 @@ export default function Products() {
       imageUrl = publicUrl;
     }
 
-    // 3. Salvar na Base de Dados
+    // 2. Salvar Produto
     const productData = { ...form, image_url: imageUrl };
-    
     const { error } = await supabase.from('products').insert([productData]);
 
     if (error) {
@@ -55,11 +63,16 @@ export default function Products() {
     } else {
       setForm({ name: '', brand: '', buy_price: '', sell_price: '', stock: '' });
       setImage(null);
-      // Limpar o input de ficheiro visualmente
       document.getElementById('fileInput').value = "";
       fetchProducts();
     }
     setUploading(false);
+  };
+
+  // Função auxiliar para calcular total vendido
+  const calculateTotalSold = (saleItems) => {
+    if (!saleItems || saleItems.length === 0) return 0;
+    return saleItems.reduce((acc, item) => acc + item.quantity, 0);
   };
 
   const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
@@ -73,7 +86,7 @@ export default function Products() {
           <h3>Novo Produto</h3>
           
           <div className="image-upload-section" style={{marginBottom: '15px'}}>
-            <label style={{display: 'block', marginBottom: '5px', fontSize: '0.9rem'}}>Imagem do Produto</label>
+            <label style={{display: 'block', marginBottom: '5px', fontSize: '0.9rem'}}>Imagem</label>
             <input 
               id="fileInput"
               type="file" 
@@ -98,25 +111,58 @@ export default function Products() {
         <div className="list-view">
           <input className="search-bar" placeholder="Pesquisar produto..." value={search} onChange={e => setSearch(e.target.value)} />
           <table>
-            <thead><tr><th>Img</th><th>Nome</th><th>Marca</th><th>Stock</th><th>Compra</th><th>Venda</th><th>Lucro</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Img</th>
+                <th>Nome</th>
+                <th>Marca</th>
+                <th>Stock</th>
+                <th>Vendidos</th> {/* Nova Coluna */}
+                <th>Compra</th>
+                <th>Venda</th>
+                <th>Lucro</th>
+                <th>Margem</th> {/* Nova Coluna */}
+              </tr>
+            </thead>
             <tbody>
-              {filtered.map(p => (
-                <tr key={p.id}>
-                  <td>
-                    {p.image_url ? (
-                      <img src={p.image_url} alt={p.name} style={{width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px'}} />
-                    ) : (
-                      <span style={{fontSize: '0.8rem', color: '#ccc'}}>Sem img</span>
-                    )}
-                  </td>
-                  <td>{p.name}</td>
-                  <td>{p.brand}</td>
-                  <td style={{fontWeight: 'bold', color: p.stock < 5 ? 'red' : 'green'}}>{p.stock}</td>
-                  <td>€{p.buy_price}</td>
-                  <td>€{p.sell_price}</td>
-                  <td>€{(p.sell_price - p.buy_price).toFixed(2)}</td>
-                </tr>
-              ))}
+              {filtered.map(p => {
+                const totalSold = calculateTotalSold(p.sale_items);
+                const profit = p.sell_price - p.buy_price;
+                const margin = p.sell_price > 0 ? ((profit / p.sell_price) * 100).toFixed(0) : 0;
+
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.name} style={{width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px'}} />
+                      ) : (
+                        <span style={{fontSize: '0.8rem', color: '#ccc'}}>—</span>
+                      )}
+                    </td>
+                    <td>{p.name}</td>
+                    <td>{p.brand}</td>
+                    <td style={{fontWeight: 'bold', color: p.stock < 5 ? 'red' : 'green'}}>{p.stock}</td>
+                    {/* Exibe o total vendido */}
+                    <td style={{fontWeight: 'bold', color: '#2563eb'}}>{totalSold}</td>
+                    <td>€{p.buy_price}</td>
+                    <td>€{p.sell_price}</td>
+                    <td>€{profit.toFixed(2)}</td>
+                    {/* Exibe a margem em % */}
+                    <td>
+                      <span style={{
+                        padding: '4px 8px', 
+                        borderRadius: '12px', 
+                        background: margin > 30 ? '#dcfce7' : '#fee2e2',
+                        color: margin > 30 ? '#166534' : '#991b1b',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold'
+                      }}>
+                        {margin}%
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
