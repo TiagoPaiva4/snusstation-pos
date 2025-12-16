@@ -36,15 +36,14 @@ export default function POS() {
   };
 
   const getTotal = () => cart.reduce((acc, item) => acc + (item.sell_price * item.qty), 0);
-  const getTotalProfit = () => cart.reduce((acc, item) => acc + ((item.sell_price - item.buy_price) * item.qty), 0);
+  constRPofit = () => cart.reduce((acc, item) => acc + ((item.sell_price - item.buy_price) * item.qty), 0);
 
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedClient) return alert("Selecione produtos e um cliente.");
 
     const total = getTotal();
-    const profit = getTotalProfit();
+    const profit = constRPofit();
 
-    // 1. Criar Venda
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{ client_id: selectedClient, total_amount: total, total_profit: profit }])
@@ -54,20 +53,18 @@ export default function POS() {
 
     const saleId = saleData[0].id;
 
-    // 2. Criar Itens e Atualizar Stock
     for (const item of cart) {
       await supabase.from('sale_items').insert([{
         sale_id: saleId, product_id: item.id, quantity: item.qty, unit_price: item.sell_price, unit_profit: item.sell_price - item.buy_price
       }]);
       
-      // Atualizar stock (Idealmente usar RPC, aqui simplificado)
       const currentProduct = products.find(p => p.id === item.id);
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
 
     alert("Venda realizada com sucesso!");
     setCart([]);
-    window.location.reload(); // Recarregar para atualizar stocks
+    window.location.reload(); 
   };
 
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -79,6 +76,11 @@ export default function POS() {
         <div className="products-grid">
           {filteredProducts.map(p => (
             <div key={p.id} className="product-card" onClick={() => addToCart(p)}>
+              {p.image_url && (
+                <div style={{width: '100%', height: '120px', marginBottom: '10px', overflow: 'hidden', borderRadius: '4px'}}>
+                   <img src={p.image_url} alt={p.name} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                </div>
+              )}
               <h4>{p.name}</h4>
               <p>{p.brand}</p>
               <div className="price">€ {p.sell_price}</div>
@@ -98,7 +100,10 @@ export default function POS() {
         <div className="cart-items">
           {cart.map(item => (
             <div key={item.id} className="cart-item">
-              <span>{item.name} (x{item.qty})</span>
+              <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                {item.image_url && <img src={item.image_url} alt="" style={{width:'30px', height:'30px', borderRadius:'50%', objectFit:'cover'}}/>}
+                <span>{item.name} (x{item.qty})</span>
+              </div>
               <span>€ {(item.sell_price * item.qty).toFixed(2)}</span>
               <button onClick={() => removeFromCart(item.id)} className="remove-btn">X</button>
             </div>
@@ -107,7 +112,6 @@ export default function POS() {
 
         <div className="cart-total">
           <h3>Total: € {getTotal().toFixed(2)}</h3>
-          <p className="profit-preview">Lucro previsto: € {getTotalProfit().toFixed(2)}</p>
           <button className="checkout-btn" onClick={handleCheckout}>Finalizar Venda</button>
         </div>
       </div>
