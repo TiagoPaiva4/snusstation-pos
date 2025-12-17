@@ -6,10 +6,10 @@ import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Clients from './components/Clients';
 import POS from './components/POS';
+import SalesHistory from './components/SalesHistory'; // <--- IMPORTAÇÃO NOVA
 import './App.css';
-import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History } from 'lucide-react';
 
-// Componente auxiliar para fechar o menu ao clicar num link (UX melhor)
 const NavItem = ({ to, icon: Icon, label, onClick }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
@@ -22,7 +22,7 @@ const NavItem = ({ to, icon: Icon, label, onClick }) => {
 
 function App() {
   const [session, setSession] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Novo estado para o menu
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -48,7 +48,6 @@ function App() {
     <Router>
       <div className="app-container">
         <aside className="sidebar">
-          {/* Cabeçalho da Sidebar (Logo + Botão Mobile) */}
           <div className="sidebar-header-mobile">
             <div className="logo">SnusStation POS</div>
             <button 
@@ -59,11 +58,11 @@ function App() {
             </button>
           </div>
           
-          {/* Menu de Navegação (Links + Logout) */}
           <div className={`sidebar-menu ${mobileMenuOpen ? 'open' : ''}`}>
             <nav>
               <NavItem to="/" icon={LayoutDashboard} label="Dashboard" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/pos" icon={ShoppingCart} label="Vendas (POS)" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/sales" icon={History} label="Histórico" onClick={() => setMobileMenuOpen(false)} /> {/* <--- LINK NOVO */}
               <NavItem to="/products" icon={Package} label="Produtos" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/clients" icon={Users} label="Clientes" onClick={() => setMobileMenuOpen(false)} />
             </nav>
@@ -77,6 +76,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/pos" element={<POS />} />
+            <Route path="/sales" element={<SalesHistory />} /> {/* <--- ROTA NOVA */}
             <Route path="/products" element={<Products />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="*" element={<Navigate to="/" />} />
