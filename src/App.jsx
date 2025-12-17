@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -7,10 +7,22 @@ import Products from './components/Products';
 import Clients from './components/Clients';
 import POS from './components/POS';
 import './App.css';
-import { LayoutDashboard, ShoppingCart, Users, Package, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X } from 'lucide-react';
+
+// Componente auxiliar para fechar o menu ao clicar num link (UX melhor)
+const NavItem = ({ to, icon: Icon, label, onClick }) => {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+  return (
+    <Link to={to} className={`nav-item ${isActive ? 'active' : ''}`} onClick={onClick}>
+      <Icon size={20} /> {label}
+    </Link>
+  );
+};
 
 function App() {
   const [session, setSession] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Novo estado para o menu
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -36,15 +48,31 @@ function App() {
     <Router>
       <div className="app-container">
         <aside className="sidebar">
-          <div className="logo">SnusStation POS</div>
-          <nav>
-            <Link to="/" className="nav-item"><LayoutDashboard size={20}/> Dashboard</Link>
-            <Link to="/pos" className="nav-item"><ShoppingCart size={20}/> Vendas (POS)</Link>
-            <Link to="/products" className="nav-item"><Package size={20}/> Produtos</Link>
-            <Link to="/clients" className="nav-item"><Users size={20}/> Clientes</Link>
-          </nav>
-          <button onClick={handleLogout} className="logout-btn"><LogOut size={20}/> Sair</button>
+          {/* Cabeçalho da Sidebar (Logo + Botão Mobile) */}
+          <div className="sidebar-header-mobile">
+            <div className="logo">SnusStation POS</div>
+            <button 
+              className="mobile-menu-toggle" 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+            </button>
+          </div>
+          
+          {/* Menu de Navegação (Links + Logout) */}
+          <div className={`sidebar-menu ${mobileMenuOpen ? 'open' : ''}`}>
+            <nav>
+              <NavItem to="/" icon={LayoutDashboard} label="Dashboard" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/pos" icon={ShoppingCart} label="Vendas (POS)" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/products" icon={Package} label="Produtos" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/clients" icon={Users} label="Clientes" onClick={() => setMobileMenuOpen(false)} />
+            </nav>
+            <button onClick={handleLogout} className="logout-btn">
+              <LogOut size={20}/> Sair
+            </button>
+          </div>
         </aside>
+
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
