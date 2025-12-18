@@ -1,19 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { X, UserPlus, Calendar, Plus, Minus, Trash2, ShoppingCart } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X } from 'lucide-react';
+import '../styles/POS.css';
 
 export default function POS() {
+  // --- ESTADOS ---
   const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
   const [cart, setCart] = useState([]);
-  const [selectedClient, setSelectedClient] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showResults, setShowResults] = useState(false);
+  const [selectedClient, setSelectedClient] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Estado para o Modal de Novo Cliente
   const [showModal, setShowModal] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', location: '' });
 
+  const searchRef = useRef(null);
+
+  // --- EFEITOS ---
   useEffect(() => {
     fetchData();
+    const handleClickOutside = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) setShowResults(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const fetchData = async () => {
@@ -23,6 +36,7 @@ export default function POS() {
     setClients(cData || []);
   };
 
+  // --- LÓGICA DO CARRINHO ---
   const addToCart = (product) => {
     const existing = cart.find(item => item.id === product.id);
     if (existing) {
@@ -34,18 +48,15 @@ export default function POS() {
     } else {
       setCart([...cart, { ...product, qty: 1 }]);
     }
+    setSearchTerm('');
+    setShowResults(false);
   };
 
-  // Nova função para atualizar quantidade (+ ou -)
   const updateQuantity = (id, delta) => {
     setCart(cart.map(item => {
       if (item.id === id) {
         const newQty = item.qty + delta;
-        
-        // Impede quantidade menor que 1 (usa o botão de remover para isso)
         if (newQty < 1) return item;
-
-        // Verifica stock se estiver a aumentar
         if (delta > 0 && newQty > item.stock) {
           alert("Limite de stock atingido!");
           return item;
@@ -56,10 +67,19 @@ export default function POS() {
     }));
   };
 
-  const removeFromCart = (id) => {
-    setCart(cart.filter(item => item.id !== id));
-  };
+  const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
+  // --- CÁLCULOS ---
+  const getTotal = () => cart.reduce((acc, item) => acc + (item.sell_price * item.qty), 0);
+  const getTotalProfit = () => cart.reduce((acc, item) => acc + ((item.sell_price - item.buy_price) * item.qty), 0);
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // --- AÇÕES DE BASE DE DADOS ---
+
+  // Criar Novo Cliente
   const handleCreateClient = async (e) => {
     e.preventDefault();
     if (!newClient.name) return alert("O nome é obrigatório.");
@@ -77,15 +97,14 @@ export default function POS() {
     }
   };
 
-  const getTotal = () => cart.reduce((acc, item) => acc + (item.sell_price * item.qty), 0);
-  const getTotalProfit = () => cart.reduce((acc, item) => acc + ((item.sell_price - item.buy_price) * item.qty), 0);
-
+  // Finalizar Venda (Checkout)
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedClient) return alert("Selecione produtos e um cliente.");
 
     const total = getTotal();
     const profit = getTotalProfit();
 
+    // 1. Inserir a Venda
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{ 
@@ -100,10 +119,16 @@ export default function POS() {
 
     const saleId = saleData[0].id;
 
+    // 2. Inserir Itens e Atualizar Stock
     for (const item of cart) {
       await supabase.from('sale_items').insert([{
-        sale_id: saleId, product_id: item.id, quantity: item.qty, unit_price: item.sell_price, unit_profit: item.sell_price - item.buy_price
+        sale_id: saleId, 
+        product_id: item.id, 
+        quantity: item.qty, 
+        unit_price: item.sell_price, 
+        unit_profit: item.sell_price - item.buy_price
       }]);
+
       const currentProduct = products.find(p => p.id === item.id);
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
@@ -113,104 +138,124 @@ export default function POS() {
     window.location.reload(); 
   };
 
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
   return (
-    <div className="pos-container">
-      {/* Painel de Produtos */}
-      <div className="products-panel">
-        <div className="pos-header">
-          <input className="search-bar" placeholder="🔍 Procurar produto..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
-        <div className="products-grid">
-          {filteredProducts.map(p => (
-            <div key={p.id} className="product-card" onClick={() => addToCart(p)}>
-              <div className="card-image-container">
-                {p.image_url ? <img src={p.image_url} alt={p.name} /> : <div className="no-image">Sem Foto</div>}
-                <div className="stock-badge">{p.stock} un</div>
-              </div>
-              <div className="card-info">
-                <h4>{p.name}</h4>
-                <p className="brand">{p.brand}</p>
-                <div className="price">€ {p.sell_price}</div>
-              </div>
-            </div>
-          ))}
+    <div className="pos-wrapper">
+      
+      {/* SELETOR DE CLIENTE (Grid Area: client) */}
+      <div className="pos-area-client">
+        <div className="sidebar-card client-card">
+          <label>Cliente da Venda</label>
+          <div className="client-input-group">
+            <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}>
+              <option value="">Selecione o Cliente...</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button className="add-client-btn" onClick={() => setShowModal(true)}>
+              <UserPlus size={18}/>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Painel do Carrinho (Renovado) */}
-      <div className="cart-panel">
-        <div className="cart-header-main">
-          <h3><ShoppingCart size={20}/> Carrinho ({cart.length})</h3>
-          <div className="date-picker-wrapper">
-             <Calendar size={16} className="calendar-icon"/>
-             <input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+      {/* ÁREA DE PESQUISA E CARRINHO (Grid Area: main) */}
+      <div className="pos-area-main">
+        <div className="search-container" ref={searchRef}>
+          <div className="search-input-wrapper">
+            <Search className="search-icon" size={20} />
+            <input 
+              type="text" 
+              placeholder="Pesquisar produto..." 
+              value={searchTerm}
+              onFocus={() => setShowResults(true)}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-        </div>
 
-        <div className="client-selector-area">
-          <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)} className="client-select-main">
-            <option value="">Selecione o Cliente...</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <button className="btn-icon-only" onClick={() => setShowModal(true)} title="Novo Cliente">
-            <UserPlus size={20} />
-          </button>
-        </div>
-        
-        <div className="cart-items-list">
-          {cart.length === 0 ? (
-            <div className="empty-cart-state">
-              <ShoppingCart size={48} opacity={0.2} />
-              <p>O carrinho está vazio</p>
+          {showResults && searchTerm.length > 0 && (
+            <div className="results-dropdown">
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map(p => (
+                  <div key={p.id} className="result-item" onClick={() => addToCart(p)}>
+                    <div className="result-main-info">
+                      <div className="product-img-tiny">
+                        {p.image_url ? <img src={p.image_url} alt="" /> : <div className="no-img-placeholder"></div>}
+                      </div>
+                      <div className="result-info">
+                        <span className="result-name">{p.name}</span>
+                        <span className="result-stock">Stock: {p.stock} un</span>
+                      </div>
+                    </div>
+                    <span className="result-price">€{p.sell_price.toFixed(2)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="no-results">Nenhum produto encontrado</div>
+              )}
             </div>
-          ) : (
-            cart.map(item => (
-              <div key={item.id} className="cart-item-modern">
-                <div className="cart-item-image">
-                  {item.image_url ? <img src={item.image_url} alt="" /> : <div className="no-img-placeholder">img</div>}
-                </div>
-                
-                <div className="cart-item-details">
-                  <div className="item-name">{item.name}</div>
-                  <div className="item-price-unit">€ {item.sell_price} / un</div>
-                </div>
-
-                <div className="cart-item-controls">
-                  <div className="qty-selector">
-                    <button onClick={() => updateQuantity(item.id, -1)} className="qty-btn"><Minus size={14}/></button>
-                    <span>{item.qty}</span>
-                    <button onClick={() => updateQuantity(item.id, 1)} className="qty-btn"><Plus size={14}/></button>
-                  </div>
-                  <div className="item-total-price">
-                    € {(item.sell_price * item.qty).toFixed(2)}
-                  </div>
-                  <button onClick={() => removeFromCart(item.id)} className="delete-btn">
-                    <Trash2 size={18}/>
-                  </button>
-                </div>
-              </div>
-            ))
           )}
         </div>
 
-        <div className="cart-footer-modern">
+        <div className="cart-section">
+          <div className="section-header">
+            <h2><ShoppingCart size={20} /> Carrinho</h2>
+            <span className="item-count">{cart.length} itens</span>
+          </div>
+          
+          <div className="cart-list">
+            {cart.length === 0 ? (
+              <div className="empty-state">O carrinho está vazio</div>
+            ) : (
+              cart.map(item => (
+                <div key={item.id} className="cart-card">
+                  <div className="cart-card-main">
+                    <div className="product-img-small">
+                      {item.image_url ? <img src={item.image_url} alt="" /> : <div className="no-img-placeholder"></div>}
+                    </div>
+                    <div className="cart-card-info">
+                      <span className="product-name">{item.name}</span>
+                      <span className="product-unit-price">€{item.sell_price.toFixed(2)} / un</span>
+                    </div>
+                  </div>
+                  <div className="cart-card-controls">
+                    <div className="qty-picker">
+                      <button onClick={() => updateQuantity(item.id, -1)}><Minus size={14}/></button>
+                      <span>{item.qty}</span>
+                      <button onClick={() => updateQuantity(item.id, 1)}><Plus size={14}/></button>
+                    </div>
+                    <span className="item-total">€{(item.sell_price * item.qty).toFixed(2)}</span>
+                    <button className="remove-btn" onClick={() => removeFromCart(item.id)}>
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ÁREA DE RESUMO (Grid Area: summary) */}
+      <div className="pos-area-summary">
+        <div className="sidebar-card summary-card">
           <div className="summary-row">
             <span>Subtotal</span>
-            <span>€ {getTotal().toFixed(2)}</span>
+            <span>€{getTotal().toFixed(2)}</span>
           </div>
-          <div className="summary-row total">
-            <span>Total a Pagar</span>
-            <span>€ {getTotal().toFixed(2)}</span>
+          <div className="summary-row profit">
+            <span>Lucro da Venda</span>
+            <span>€{getTotalProfit().toFixed(2)}</span>
           </div>
-          <button className="checkout-btn-modern" onClick={handleCheckout}>
+          <div className="summary-total">
+            <label>Total a Pagar</label>
+            <div className="total-amount">€{getTotal().toFixed(2)}</div>
+          </div>
+          <button className="checkout-btn" onClick={handleCheckout} disabled={cart.length === 0}>
             Confirmar Venda
           </button>
         </div>
       </div>
 
-      {/* Modal Novo Cliente (Mantido igual) */}
+      {/* MODAL NOVO CLIENTE */}
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -218,12 +263,12 @@ export default function POS() {
               <h3>Novo Cliente</h3>
               <button onClick={() => setShowModal(false)} className="close-modal"><X size={20}/></button>
             </div>
-            <form onSubmit={handleCreateClient}>
+            <form onSubmit={handleCreateClient} className="modern-form">
               <input placeholder="Nome" value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} required />
               <input placeholder="Email" type="email" value={newClient.email} onChange={e => setNewClient({...newClient, email: e.target.value})} />
               <input placeholder="Telefone" value={newClient.phone} onChange={e => setNewClient({...newClient, phone: e.target.value})} />
               <input placeholder="Localidade" value={newClient.location} onChange={e => setNewClient({...newClient, location: e.target.value})} />
-              <button type="submit" className="save-btn">Criar Cliente</button>
+              <button type="submit" className="save-btn">Criar e Selecionar</button>
             </form>
           </div>
         </div>
