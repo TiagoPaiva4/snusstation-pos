@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+// Em vez de BrowserRouter as Router, usa HashRouter
+import { HashRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
