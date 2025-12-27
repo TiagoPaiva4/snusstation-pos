@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Calendar, ChevronDown, ChevronRight, Package, Trash2, User } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Package, Trash2, User, Gift } from 'lucide-react';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState([]);
@@ -14,7 +14,7 @@ export default function SalesHistory() {
 
   const fetchSales = async () => {
     setLoading(true);
-    // IMPORTANTE: Trazemos tudo (*) incluindo o 'seller_name' que adicionámos
+    // Trazemos as vendas, os clientes e os itens (e o nome do produto dentro do item)
     const { data, error } = await supabase
       .from('sales')
       .select('*, clients(name), sale_items(*, products(name))')
@@ -37,14 +37,15 @@ export default function SalesHistory() {
     try {
       // 1. Repor Stock
       for (const item of sale.sale_items) {
-        // Busca stock atual
+        // Busca stock atual do produto
         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
         if (prod) {
+          // Repõe a quantidade vendida (mesmo que tenha sido oferta, saiu do stock, por isso devolvemos)
           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id);
         }
       }
 
-      // 2. Apagar Venda (O Cascade apaga os itens)
+      // 2. Apagar Venda (O Cascade na DB deve apagar os itens automaticamente)
       const { error } = await supabase.from('sales').delete().eq('id', sale.id);
       if (error) throw error;
 
@@ -55,7 +56,7 @@ export default function SalesHistory() {
     }
   };
 
-  // Filtro simples
+  // Filtro de pesquisa
   const filteredSales = sales.filter(sale => 
     (sale.clients?.name || 'Cliente Final').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (sale.seller_name || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -82,14 +83,14 @@ export default function SalesHistory() {
         </div>
 
         <div className="table-wrapper">
-          <table style={{minWidth: '800px'}}>
+          <table style={{minWidth: '900px'}}>
             <thead>
               <tr>
                 <th style={{width: '40px'}}></th>
                 <th>Data</th>
-                <th>Vendedor</th> {/* <--- NOVA COLUNA */}
+                <th>Vendedor</th>
                 <th>Cliente</th>
-                <th>Método</th>
+                {/* <th>Método</th> - Opcional, descomenta se quiseres ver */}
                 <th>Total</th>
                 <th>Lucro</th>
                 <th>Ações</th>
@@ -97,12 +98,13 @@ export default function SalesHistory() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="8" style={{textAlign: 'center', padding: '30px'}}>A carregar histórico...</td></tr>
+                <tr><td colSpan="7" style={{textAlign: 'center', padding: '30px'}}>A carregar histórico...</td></tr>
               ) : filteredSales.length === 0 ? (
-                <tr><td colSpan="8" style={{textAlign: 'center', padding: '30px'}}>Nenhuma venda encontrada.</td></tr>
+                <tr><td colSpan="7" style={{textAlign: 'center', padding: '30px'}}>Nenhuma venda encontrada.</td></tr>
               ) : (
                 filteredSales.map(sale => (
                   <React.Fragment key={sale.id}>
+                    {/* LINHA PRINCIPAL DA VENDA */}
                     <tr 
                       onClick={() => toggleRow(sale.id)} 
                       style={{cursor: 'pointer', background: expandedRows[sale.id] ? '#f8fafc' : 'white'}}
@@ -120,7 +122,7 @@ export default function SalesHistory() {
                         </small>
                       </td>
                       
-                      {/* MOSTRAR VENDEDOR */}
+                      {/* VENDEDOR */}
                       <td>
                         <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
                           <User size={14} color="#64748b"/>
@@ -131,11 +133,16 @@ export default function SalesHistory() {
                       </td>
 
                       <td>{sale.clients?.name || <span style={{color:'#94a3b8'}}>Cliente Final</span>}</td>
-                      <td>
-                        <span className="badge badge-neutral">{sale.payment_method}</span>
-                      </td>
+                      
+                      {/* <td><span className="badge badge-neutral">{sale.payment_method || 'N/A'}</span></td> */}
+                      
                       <td style={{fontWeight: 'bold'}}>€ {sale.total_amount.toFixed(2)}</td>
-                      <td style={{color: '#10b981'}}>+€ {sale.total_profit.toFixed(2)}</td>
+                      
+                      {/* Se o lucro for negativo (muitas ofertas), mostra a vermelho */}
+                      <td style={{color: sale.total_profit >= 0 ? '#10b981' : '#ef4444'}}>
+                        {sale.total_profit >= 0 ? '+' : ''}€ {sale.total_profit.toFixed(2)}
+                      </td>
+                      
                       <td>
                         <button 
                           className="delete-btn" 
@@ -147,34 +154,65 @@ export default function SalesHistory() {
                       </td>
                     </tr>
 
-                    {/* DETALHES DA VENDA (EXPANDIDO) */}
+                    {/* DETALHES DA VENDA (ITENS EXPANDIDOS) */}
                     {expandedRows[sale.id] && (
                       <tr style={{background: '#f8fafc'}}>
-                        <td colSpan="8" style={{padding: '0 20px 20px 20px'}}>
+                        <td colSpan="7" style={{padding: '0 20px 20px 20px'}}>
                           <div style={{background: 'white', borderRadius: '8px', padding: '15px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'}}>
-                            <h5 style={{margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                            <h5 style={{margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px', color:'#475569'}}>
                               <Package size={16}/> Itens da Venda
                             </h5>
                             <table style={{width: '100%', fontSize: '0.9rem'}}>
                               <thead>
                                 <tr style={{background: '#f1f5f9'}}>
-                                  <th style={{padding: '8px'}}>Produto</th>
+                                  <th style={{padding: '8px', textAlign:'left'}}>Produto</th>
                                   <th style={{padding: '8px', textAlign: 'center'}}>Qtd</th>
                                   <th style={{padding: '8px', textAlign: 'right'}}>Preço Un.</th>
                                   <th style={{padding: '8px', textAlign: 'right'}}>Subtotal</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {sale.sale_items.map(item => (
-                                  <tr key={item.id} style={{borderBottom: '1px solid #f1f5f9'}}>
-                                    <td style={{padding: '8px'}}>{item.products?.name || 'Produto Removido'}</td>
-                                    <td style={{padding: '8px', textAlign: 'center'}}>{item.quantity}</td>
-                                    <td style={{padding: '8px', textAlign: 'right'}}>€ {item.unit_price.toFixed(2)}</td>
-                                    <td style={{padding: '8px', textAlign: 'right', fontWeight: '500'}}>
-                                      € {(item.quantity * item.unit_price).toFixed(2)}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {sale.sale_items.map(item => {
+                                  // Detetar se foi oferta (preço = 0)
+                                  const isOffer = item.unit_price === 0;
+
+                                  return (
+                                    <tr key={item.id} style={{borderBottom: '1px solid #f1f5f9'}}>
+                                      <td style={{padding: '8px'}}>
+                                        {item.products?.name || 'Produto Removido'}
+                                        {isOffer && (
+                                          <span style={{
+                                            marginLeft: '8px', 
+                                            fontSize:'0.75rem', 
+                                            background:'#dcfce7', 
+                                            color:'#166534', 
+                                            padding:'2px 8px', 
+                                            borderRadius:'4px', 
+                                            fontWeight:'bold',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                          }}>
+                                            <Gift size={12}/> OFERTA
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td style={{padding: '8px', textAlign: 'center'}}>{item.quantity}</td>
+                                      
+                                      <td style={{padding: '8px', textAlign: 'right'}}>
+                                        {isOffer ? (
+                                          <span style={{color: '#166534', fontWeight:'bold'}}>Grátis</span>
+                                        ) : (
+                                          `€ ${item.unit_price.toFixed(2)}`
+                                        )}
+                                      </td>
+                                      
+                                      <td style={{padding: '8px', textAlign: 'right', fontWeight: '500'}}>
+                                        € {(item.quantity * item.unit_price).toFixed(2)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

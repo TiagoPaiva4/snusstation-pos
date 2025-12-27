@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift } from 'lucide-react';
 import '../styles/POS.css';
 
 export default function POS() {
@@ -46,7 +46,8 @@ export default function POS() {
         alert("Stock insuficiente!");
       }
     } else {
-      setCart([...cart, { ...product, qty: 1 }]);
+      // is_offer: false por defeito
+      setCart([...cart, { ...product, qty: 1, is_offer: false }]);
     }
     setSearchTerm('');
     setShowResults(false);
@@ -67,19 +68,37 @@ export default function POS() {
     }));
   };
 
+  // --- NOVA FUNÇÃO: Alternar Oferta ---
+  const toggleOffer = (id) => {
+    setCart(cart.map(item => 
+      item.id === id ? { ...item, is_offer: !item.is_offer } : item
+    ));
+  };
+
   const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
-  // --- CÁLCULOS ---
-  const getTotal = () => cart.reduce((acc, item) => acc + (item.sell_price * item.qty), 0);
-  const getTotalProfit = () => cart.reduce((acc, item) => acc + ((item.sell_price - item.buy_price) * item.qty), 0);
+  // --- CÁLCULOS ATUALIZADOS ---
+  const getTotal = () => {
+    return cart.reduce((acc, item) => {
+      // Se for oferta, o preço para o cliente é 0
+      const price = item.is_offer ? 0 : item.sell_price;
+      return acc + (price * item.qty);
+    }, 0);
+  };
+
+  const getTotalProfit = () => {
+    return cart.reduce((acc, item) => {
+      // Se for oferta: Receita é 0, mas o Custo de compra mantém-se (logo é prejuízo/custo de marketing)
+      const revenue = item.is_offer ? 0 : item.sell_price;
+      return acc + ((revenue - item.buy_price) * item.qty);
+    }, 0);
+  };
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // --- AÇÕES DE BASE DE DADOS ---
-
-  // Criar Novo Cliente
   const handleCreateClient = async (e) => {
     e.preventDefault();
     if (!newClient.name) return alert("O nome é obrigatório.");
@@ -97,18 +116,15 @@ export default function POS() {
     }
   };
 
-  // Finalizar Venda (Checkout)
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedClient) return alert("Selecione produtos e um cliente.");
 
-    // --- NOVO CÓDIGO: IDENTIFICAR O VENDEDOR ---
+    // Obter Vendedor
     const { data: { user } } = await supabase.auth.getUser();
     let sellerName = 'Desconhecido';
     if (user) {
-       // Tenta obter o nome dos metadados ou usa o email
        sellerName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
     }
-    // -------------------------------------------
 
     const total = getTotal();
     const profit = getTotalProfit();
@@ -121,7 +137,6 @@ export default function POS() {
         total_amount: total, 
         total_profit: profit,
         created_at: saleDate,
-        // Guardar quem fez a venda
         user_id: user?.id,
         seller_name: sellerName
       }])
@@ -133,15 +148,20 @@ export default function POS() {
 
     // 2. Inserir Itens e Atualizar Stock
     for (const item of cart) {
+      // Prepara os valores finais (considerando se é oferta ou não)
+      const finalPrice = item.is_offer ? 0 : item.sell_price;
+      const finalProfit = finalPrice - item.buy_price; // Se for oferta, fica negativo (custo)
+
       await supabase.from('sale_items').insert([{
         sale_id: saleId, 
         product_id: item.id, 
         quantity: item.qty, 
-        unit_price: item.sell_price, 
-        unit_profit: item.sell_price - item.buy_price
+        unit_price: finalPrice, 
+        unit_profit: finalProfit
       }]);
 
       const currentProduct = products.find(p => p.id === item.id);
+      // O stock desce sempre, independentemente de ser oferta ou venda
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
 
@@ -153,7 +173,7 @@ export default function POS() {
   return (
     <div className="pos-wrapper">
        
-      {/* SELETOR DE CLIENTE (Grid Area: client) */}
+      {/* SELETOR DE CLIENTE */}
       <div className="pos-area-client">
         <div className="sidebar-card client-card">
           <label>Cliente da Venda</label>
@@ -169,7 +189,7 @@ export default function POS() {
         </div>
       </div>
 
-      {/* ÁREA DE PESQUISA E CARRINHO (Grid Area: main) */}
+      {/* ÁREA DE PESQUISA E CARRINHO */}
       <div className="pos-area-main">
         <div className="search-container" ref={searchRef}>
           <div className="search-input-wrapper">
@@ -218,23 +238,52 @@ export default function POS() {
               <div className="empty-state">O carrinho está vazio</div>
             ) : (
               cart.map(item => (
-                <div key={item.id} className="cart-card">
+                <div key={item.id} className={`cart-card ${item.is_offer ? 'is-offer-card' : ''}`}>
                   <div className="cart-card-main">
                     <div className="product-img-small">
                       {item.image_url ? <img src={item.image_url} alt="" /> : <div className="no-img-placeholder"></div>}
                     </div>
                     <div className="cart-card-info">
-                      <span className="product-name">{item.name}</span>
-                      <span className="product-unit-price">€{item.sell_price.toFixed(2)} / un</span>
+                      <span className="product-name">
+                        {item.name} 
+                        {item.is_offer && <span style={{marginLeft: '8px', fontSize:'0.7rem', background:'#dcfce7', color:'#166534', padding:'2px 6px', borderRadius:'4px', fontWeight:'bold'}}>OFERTA 🎁</span>}
+                      </span>
+                      
+                      {/* Preço riscado se for oferta */}
+                      <span className="product-unit-price">
+                        {item.is_offer ? (
+                          <>
+                            <span style={{textDecoration: 'line-through', color:'#94a3b8', marginRight:'5px'}}>€{item.sell_price.toFixed(2)}</span>
+                            <span style={{color:'#166534', fontWeight:'bold'}}>€0.00</span>
+                          </>
+                        ) : (
+                          `€${item.sell_price.toFixed(2)} / un`
+                        )}
+                      </span>
                     </div>
                   </div>
+                  
                   <div className="cart-card-controls">
                     <div className="qty-picker">
                       <button onClick={() => updateQuantity(item.id, -1)}><Minus size={14}/></button>
                       <span>{item.qty}</span>
                       <button onClick={() => updateQuantity(item.id, 1)}><Plus size={14}/></button>
                     </div>
-                    <span className="item-total">€{(item.sell_price * item.qty).toFixed(2)}</span>
+
+                    <span className="item-total">
+                      €{(item.is_offer ? 0 : item.sell_price * item.qty).toFixed(2)}
+                    </span>
+
+                    {/* Botão de Oferta */}
+                    <button 
+                      className="action-btn offer-btn" 
+                      onClick={() => toggleOffer(item.id)}
+                      title={item.is_offer ? "Remover Oferta" : "Marcar como Oferta"}
+                      style={{ color: item.is_offer ? '#166534' : '#94a3b8', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                    >
+                      <Gift size={18} fill={item.is_offer ? "#dcfce7" : "none"} />
+                    </button>
+
                     <button className="remove-btn" onClick={() => removeFromCart(item.id)}>
                       <Trash2 size={18} />
                     </button>
@@ -246,7 +295,7 @@ export default function POS() {
         </div>
       </div>
 
-      {/* ÁREA DE RESUMO (Grid Area: summary) */}
+      {/* ÁREA DE RESUMO */}
       <div className="pos-area-summary">
         <div className="sidebar-card summary-card">
           <div className="summary-row">
