@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store } from 'lucide-react';
 import '../styles/POS.css';
 
 export default function POS() {
@@ -12,6 +12,9 @@ export default function POS() {
   const [showResults, setShowResults] = useState(false);
   const [selectedClient, setSelectedClient] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // NOVO ESTADO: Canal de Venda (Fisica ou Shopify)
+  const [saleChannel, setSaleChannel] = useState('Fisica');
    
   // Estado para o Modal de Novo Cliente
   const [showModal, setShowModal] = useState(false);
@@ -46,7 +49,6 @@ export default function POS() {
         alert("Stock insuficiente!");
       }
     } else {
-      // is_offer: false por defeito
       setCart([...cart, { ...product, qty: 1, is_offer: false }]);
     }
     setSearchTerm('');
@@ -68,7 +70,6 @@ export default function POS() {
     }));
   };
 
-  // --- NOVA FUNÇÃO: Alternar Oferta ---
   const toggleOffer = (id) => {
     setCart(cart.map(item => 
       item.id === id ? { ...item, is_offer: !item.is_offer } : item
@@ -77,10 +78,9 @@ export default function POS() {
 
   const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
-  // --- CÁLCULOS ATUALIZADOS ---
+  // --- CÁLCULOS ---
   const getTotal = () => {
     return cart.reduce((acc, item) => {
-      // Se for oferta, o preço para o cliente é 0
       const price = item.is_offer ? 0 : item.sell_price;
       return acc + (price * item.qty);
     }, 0);
@@ -88,7 +88,6 @@ export default function POS() {
 
   const getTotalProfit = () => {
     return cart.reduce((acc, item) => {
-      // Se for oferta: Receita é 0, mas o Custo de compra mantém-se (logo é prejuízo/custo de marketing)
       const revenue = item.is_offer ? 0 : item.sell_price;
       return acc + ((revenue - item.buy_price) * item.qty);
     }, 0);
@@ -119,7 +118,6 @@ export default function POS() {
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedClient) return alert("Selecione produtos e um cliente.");
 
-    // Obter Vendedor
     const { data: { user } } = await supabase.auth.getUser();
     let sellerName = 'Desconhecido';
     if (user) {
@@ -129,7 +127,7 @@ export default function POS() {
     const total = getTotal();
     const profit = getTotalProfit();
 
-    // 1. Inserir a Venda
+    // 1. Inserir a Venda (Incluindo o sale_channel)
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{ 
@@ -138,7 +136,8 @@ export default function POS() {
         total_profit: profit,
         created_at: saleDate,
         user_id: user?.id,
-        seller_name: sellerName
+        seller_name: sellerName,
+        sale_channel: saleChannel // <--- NOVO CAMPO
       }])
       .select();
 
@@ -146,11 +145,10 @@ export default function POS() {
 
     const saleId = saleData[0].id;
 
-    // 2. Inserir Itens e Atualizar Stock
+    // 2. Inserir Itens
     for (const item of cart) {
-      // Prepara os valores finais (considerando se é oferta ou não)
       const finalPrice = item.is_offer ? 0 : item.sell_price;
-      const finalProfit = finalPrice - item.buy_price; // Se for oferta, fica negativo (custo)
+      const finalProfit = finalPrice - item.buy_price;
 
       await supabase.from('sale_items').insert([{
         sale_id: saleId, 
@@ -161,12 +159,12 @@ export default function POS() {
       }]);
 
       const currentProduct = products.find(p => p.id === item.id);
-      // O stock desce sempre, independentemente de ser oferta ou venda
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
 
-    alert("Venda registada com sucesso!");
+    alert(`Venda (${saleChannel}) registada com sucesso!`);
     setCart([]);
+    setSaleChannel('Fisica'); // Reset para Fisica por defeito
     window.location.reload(); 
   };
 
@@ -189,7 +187,7 @@ export default function POS() {
         </div>
       </div>
 
-      {/* ÁREA DE PESQUISA E CARRINHO */}
+      {/* ÁREA DE PESQUISA */}
       <div className="pos-area-main">
         <div className="search-container" ref={searchRef}>
           <div className="search-input-wrapper">
@@ -227,10 +225,45 @@ export default function POS() {
           )}
         </div>
 
+        {/* CARRINHO */}
         <div className="cart-section">
-          <div className="section-header">
-            <h2><ShoppingCart size={20} /> Carrinho</h2>
-            <span className="item-count">{cart.length} itens</span>
+          <div className="section-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+              <h2><ShoppingCart size={20} /> Carrinho</h2>
+              <span className="item-count">{cart.length} itens</span>
+            </div>
+
+            {/* --- SELETOR DE CANAL (FISICA vs SHOPIFY) --- */}
+            <div style={{background:'#f1f5f9', padding:'3px', borderRadius:'8px', display:'flex', gap:'5px'}}>
+              <button 
+                onClick={() => setSaleChannel('Fisica')}
+                style={{
+                  border:'none', 
+                  background: saleChannel === 'Fisica' ? 'white' : 'transparent',
+                  color: saleChannel === 'Fisica' ? '#0f172a' : '#64748b',
+                  padding: '5px 10px', borderRadius:'6px', cursor:'pointer', fontWeight:600,
+                  boxShadow: saleChannel === 'Fisica' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem'
+                }}
+              >
+                <Store size={14}/> Física
+              </button>
+              <button 
+                onClick={() => setSaleChannel('Shopify')}
+                style={{
+                  border:'none', 
+                  background: saleChannel === 'Shopify' ? '#9333ea' : 'transparent', // Roxo para Shopify
+                  color: saleChannel === 'Shopify' ? 'white' : '#64748b',
+                  padding: '5px 10px', borderRadius:'6px', cursor:'pointer', fontWeight:600,
+                  boxShadow: saleChannel === 'Shopify' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem'
+                }}
+              >
+                <Globe size={14}/> Shopify
+              </button>
+            </div>
+            {/* ------------------------------------------- */}
+
           </div>
            
           <div className="cart-list">
@@ -249,7 +282,6 @@ export default function POS() {
                         {item.is_offer && <span style={{marginLeft: '8px', fontSize:'0.7rem', background:'#dcfce7', color:'#166534', padding:'2px 6px', borderRadius:'4px', fontWeight:'bold'}}>OFERTA 🎁</span>}
                       </span>
                       
-                      {/* Preço riscado se for oferta */}
                       <span className="product-unit-price">
                         {item.is_offer ? (
                           <>
@@ -274,7 +306,6 @@ export default function POS() {
                       €{(item.is_offer ? 0 : item.sell_price * item.qty).toFixed(2)}
                     </span>
 
-                    {/* Botão de Oferta */}
                     <button 
                       className="action-btn offer-btn" 
                       onClick={() => toggleOffer(item.id)}
@@ -298,6 +329,15 @@ export default function POS() {
       {/* ÁREA DE RESUMO */}
       <div className="pos-area-summary">
         <div className="sidebar-card summary-card">
+          <div className="summary-row">
+            <span>Canal</span>
+            <span style={{
+              fontWeight: 'bold', 
+              color: saleChannel === 'Shopify' ? '#9333ea' : '#0f172a'
+            }}>
+              {saleChannel === 'Shopify' ? '🌐 Shopify' : '🏢 Loja Física'}
+            </span>
+          </div>
           <div className="summary-row">
             <span>Subtotal</span>
             <span>€{getTotal().toFixed(2)}</span>
