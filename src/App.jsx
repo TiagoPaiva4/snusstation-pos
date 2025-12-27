@@ -77,7 +77,7 @@ function App() {
               <NavItem to="/sales" icon={History} label="Histórico" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/products" icon={Package} label="Produtos" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/clients" icon={Users} label="Clientes" onClick={() => setMobileMenuOpen(false)} />
-              <NavItem to="/b2b" icon={Briefcase} label="B2B (Excel)" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/b2b" icon={Briefcase} label="B2B" onClick={() => setMobileMenuOpen(false)} />
             </nav>
             <button onClick={handleLogout} className="logout-btn">
               <LogOut size={20}/> Sair
