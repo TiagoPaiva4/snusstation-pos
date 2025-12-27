@@ -9,15 +9,10 @@ import POS from './components/POS';
 import SalesHistory from './components/SalesHistory';
 import Analytics from './components/Analytics';
 import B2B from './components/B2B';
-import SetPassword from './components/SetPassword'; // <--- IMPORTAÇÃO NOVA
+import SetPassword from './components/SetPassword';
 import './App.css';
-
-import B2B from './components/B2B';
-import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase } from 'lucide-react'; // Adiciona Briefcase
-
-// --- IMPORTA O LOGO AQUI ---
-import logoImg from './assets/logo-navbar.png'; // <--- Confirma se o nome do ficheiro está igual!
-
+import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase, Loader2 } from 'lucide-react';
+import logoImg from './assets/logo-navbar.png';
 
 const NavItem = ({ to, icon: Icon, label, onClick }) => {
   const location = useLocation();
@@ -32,19 +27,27 @@ const NavItem = ({ to, icon: Icon, label, onClick }) => {
 function App() {
   const [session, setSession] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [recoveryMode, setRecoveryMode] = useState(false); // <--- ESTADO NOVO
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [loading, setLoading] = useState(true); // Novo estado de carregamento
 
   useEffect(() => {
-    // Verificar sessão inicial
+    // 1. Verificar se é um link de Convite ou Recuperação logo ao iniciar
+    // Isto impede que o site mostre o Login erradamente
+    const hash = window.location.hash;
+    if (hash && (hash.includes('type=invite') || hash.includes('type=recovery'))) {
+      setRecoveryMode(true);
+    }
+
+    // 2. Obter sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setLoading(false);
     });
 
-    // Escutar mudanças de autenticação
+    // 3. Escutar mudanças (Login, Logout, Links de Email)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-
-      // SE FOR UM CONVITE OU RECUPERAÇÃO DE PASSWORD
+      
       if (event === 'PASSWORD_RECOVERY') {
         setRecoveryMode(true);
       }
@@ -56,22 +59,36 @@ function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setRecoveryMode(false);
+    setMobileMenuOpen(false);
   };
 
-  // 1. Se estiver em modo de recuperação (Convite), mostra o ecrã de definir senha
+  // --- RENDERIZAÇÃO ---
+
+  // 1. Mostrar Loading enquanto verifica a sessão (Evita piscar o login)
+  if (loading) {
+    return (
+      <div style={{height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f1f5f9'}}>
+        <Loader2 className="spin" size={40} color="#2563eb"/>
+      </div>
+    );
+  }
+
+  // 2. Se for link de convite/recuperação, mostra definir password
   if (recoveryMode) {
     return <SetPassword />;
   }
 
-  // 2. Se não tiver sessão, mostra Login
+  // 3. Se não tiver sessão, mostra Login
   if (!session) {
     return <Login />;
   }
 
-  // 3. Se tiver sessão normal, mostra a App
+  // 4. Se tiver sessão, mostra a App
   return (
     <Router>
       <div className="app-container">
+        
+        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-header-mobile">
             <div className="logo">
@@ -95,7 +112,6 @@ function App() {
               <NavItem to="/b2b" icon={Briefcase} label="B2B (Excel)" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/products" icon={Package} label="Produtos" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/clients" icon={Users} label="Clientes" onClick={() => setMobileMenuOpen(false)} />
-              <NavItem to="/b2b" icon={Briefcase} label="B2B" onClick={() => setMobileMenuOpen(false)} />
             </nav>
             <button onClick={handleLogout} className="logout-btn">
               <LogOut size={20}/> Sair
@@ -103,6 +119,7 @@ function App() {
           </div>
         </aside>
 
+        {/* CONTEÚDO */}
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -112,7 +129,6 @@ function App() {
             <Route path="/b2b" element={<B2B />} />
             <Route path="/products" element={<Products />} />
             <Route path="/clients" element={<Clients />} />
-            <Route path="/b2b" element={<B2B />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
