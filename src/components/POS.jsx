@@ -12,7 +12,7 @@ export default function POS() {
   const [showResults, setShowResults] = useState(false);
   const [selectedClient, setSelectedClient] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
-  
+   
   // Estado para o Modal de Novo Cliente
   const [showModal, setShowModal] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', location: '' });
@@ -101,6 +101,15 @@ export default function POS() {
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedClient) return alert("Selecione produtos e um cliente.");
 
+    // --- NOVO CÓDIGO: IDENTIFICAR O VENDEDOR ---
+    const { data: { user } } = await supabase.auth.getUser();
+    let sellerName = 'Desconhecido';
+    if (user) {
+       // Tenta obter o nome dos metadados ou usa o email
+       sellerName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
+    }
+    // -------------------------------------------
+
     const total = getTotal();
     const profit = getTotalProfit();
 
@@ -111,7 +120,10 @@ export default function POS() {
         client_id: selectedClient, 
         total_amount: total, 
         total_profit: profit,
-        created_at: saleDate 
+        created_at: saleDate,
+        // Guardar quem fez a venda
+        user_id: user?.id,
+        seller_name: sellerName
       }])
       .select();
 
@@ -140,7 +152,7 @@ export default function POS() {
 
   return (
     <div className="pos-wrapper">
-      
+       
       {/* SELETOR DE CLIENTE (Grid Area: client) */}
       <div className="pos-area-client">
         <div className="sidebar-card client-card">
@@ -200,7 +212,7 @@ export default function POS() {
             <h2><ShoppingCart size={20} /> Carrinho</h2>
             <span className="item-count">{cart.length} itens</span>
           </div>
-          
+           
           <div className="cart-list">
             {cart.length === 0 ? (
               <div className="empty-state">O carrinho está vazio</div>
