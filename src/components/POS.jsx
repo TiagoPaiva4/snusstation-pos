@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store } from 'lucide-react';
 import '../styles/POS.css';
 
 export default function POS() {
@@ -12,6 +12,9 @@ export default function POS() {
   const [showResults, setShowResults] = useState(false);
   const [selectedClient, setSelectedClient] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // NOVO ESTADO: Canal de Venda (Fisica ou Shopify)
+  const [saleChannel, setSaleChannel] = useState('Fisica');
    
   // Estado para o Modal de Novo Cliente
   const [showModal, setShowModal] = useState(false);
@@ -46,7 +49,7 @@ export default function POS() {
         alert("Stock insuficiente!");
       }
     } else {
-      setCart([...cart, { ...product, qty: 1 }]);
+      setCart([...cart, { ...product, qty: 1, is_offer: false }]);
     }
     setSearchTerm('');
     setShowResults(false);
@@ -67,19 +70,34 @@ export default function POS() {
     }));
   };
 
+  const toggleOffer = (id) => {
+    setCart(cart.map(item => 
+      item.id === id ? { ...item, is_offer: !item.is_offer } : item
+    ));
+  };
+
   const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
   // --- CÁLCULOS ---
-  const getTotal = () => cart.reduce((acc, item) => acc + (item.sell_price * item.qty), 0);
-  const getTotalProfit = () => cart.reduce((acc, item) => acc + ((item.sell_price - item.buy_price) * item.qty), 0);
+  const getTotal = () => {
+    return cart.reduce((acc, item) => {
+      const price = item.is_offer ? 0 : item.sell_price;
+      return acc + (price * item.qty);
+    }, 0);
+  };
+
+  const getTotalProfit = () => {
+    return cart.reduce((acc, item) => {
+      const revenue = item.is_offer ? 0 : item.sell_price;
+      return acc + ((revenue - item.buy_price) * item.qty);
+    }, 0);
+  };
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // --- AÇÕES DE BASE DE DADOS ---
-
-  // Criar Novo Cliente
   const handleCreateClient = async (e) => {
     e.preventDefault();
     if (!newClient.name) return alert("O nome é obrigatório.");
@@ -97,23 +115,19 @@ export default function POS() {
     }
   };
 
-  // Finalizar Venda (Checkout)
   const handleCheckout = async () => {
     if (cart.length === 0 || !selectedClient) return alert("Selecione produtos e um cliente.");
 
-    // --- NOVO CÓDIGO: IDENTIFICAR O VENDEDOR ---
     const { data: { user } } = await supabase.auth.getUser();
     let sellerName = 'Desconhecido';
     if (user) {
-       // Tenta obter o nome dos metadados ou usa o email
        sellerName = user.user_metadata?.full_name || user.user_metadata?.name || user.email;
     }
-    // -------------------------------------------
 
     const total = getTotal();
     const profit = getTotalProfit();
 
-    // 1. Inserir a Venda
+    // 1. Inserir a Venda (Incluindo o sale_channel)
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{ 
@@ -121,9 +135,9 @@ export default function POS() {
         total_amount: total, 
         total_profit: profit,
         created_at: saleDate,
-        // Guardar quem fez a venda
         user_id: user?.id,
-        seller_name: sellerName
+        seller_name: sellerName,
+        sale_channel: saleChannel // <--- NOVO CAMPO
       }])
       .select();
 
@@ -131,29 +145,33 @@ export default function POS() {
 
     const saleId = saleData[0].id;
 
-    // 2. Inserir Itens e Atualizar Stock
+    // 2. Inserir Itens
     for (const item of cart) {
+      const finalPrice = item.is_offer ? 0 : item.sell_price;
+      const finalProfit = finalPrice - item.buy_price;
+
       await supabase.from('sale_items').insert([{
         sale_id: saleId, 
         product_id: item.id, 
         quantity: item.qty, 
-        unit_price: item.sell_price, 
-        unit_profit: item.sell_price - item.buy_price
+        unit_price: finalPrice, 
+        unit_profit: finalProfit
       }]);
 
       const currentProduct = products.find(p => p.id === item.id);
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
 
-    alert("Venda registada com sucesso!");
+    alert(`Venda (${saleChannel}) registada com sucesso!`);
     setCart([]);
+    setSaleChannel('Fisica'); // Reset para Fisica por defeito
     window.location.reload(); 
   };
 
   return (
     <div className="pos-wrapper">
        
-      {/* SELETOR DE CLIENTE (Grid Area: client) */}
+      {/* SELETOR DE CLIENTE */}
       <div className="pos-area-client">
         <div className="sidebar-card client-card">
           <label>Cliente da Venda</label>
@@ -169,7 +187,7 @@ export default function POS() {
         </div>
       </div>
 
-      {/* ÁREA DE PESQUISA E CARRINHO (Grid Area: main) */}
+      {/* ÁREA DE PESQUISA */}
       <div className="pos-area-main">
         <div className="search-container" ref={searchRef}>
           <div className="search-input-wrapper">
@@ -207,10 +225,45 @@ export default function POS() {
           )}
         </div>
 
+        {/* CARRINHO */}
         <div className="cart-section">
-          <div className="section-header">
-            <h2><ShoppingCart size={20} /> Carrinho</h2>
-            <span className="item-count">{cart.length} itens</span>
+          <div className="section-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+              <h2><ShoppingCart size={20} /> Carrinho</h2>
+              <span className="item-count">{cart.length} itens</span>
+            </div>
+
+            {/* --- SELETOR DE CANAL (FISICA vs SHOPIFY) --- */}
+            <div style={{background:'#f1f5f9', padding:'3px', borderRadius:'8px', display:'flex', gap:'5px'}}>
+              <button 
+                onClick={() => setSaleChannel('Fisica')}
+                style={{
+                  border:'none', 
+                  background: saleChannel === 'Fisica' ? 'white' : 'transparent',
+                  color: saleChannel === 'Fisica' ? '#0f172a' : '#64748b',
+                  padding: '5px 10px', borderRadius:'6px', cursor:'pointer', fontWeight:600,
+                  boxShadow: saleChannel === 'Fisica' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem'
+                }}
+              >
+                <Store size={14}/> Física
+              </button>
+              <button 
+                onClick={() => setSaleChannel('Shopify')}
+                style={{
+                  border:'none', 
+                  background: saleChannel === 'Shopify' ? '#9333ea' : 'transparent', // Roxo para Shopify
+                  color: saleChannel === 'Shopify' ? 'white' : '#64748b',
+                  padding: '5px 10px', borderRadius:'6px', cursor:'pointer', fontWeight:600,
+                  boxShadow: saleChannel === 'Shopify' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem'
+                }}
+              >
+                <Globe size={14}/> Shopify
+              </button>
+            </div>
+            {/* ------------------------------------------- */}
+
           </div>
            
           <div className="cart-list">
@@ -218,23 +271,50 @@ export default function POS() {
               <div className="empty-state">O carrinho está vazio</div>
             ) : (
               cart.map(item => (
-                <div key={item.id} className="cart-card">
+                <div key={item.id} className={`cart-card ${item.is_offer ? 'is-offer-card' : ''}`}>
                   <div className="cart-card-main">
                     <div className="product-img-small">
                       {item.image_url ? <img src={item.image_url} alt="" /> : <div className="no-img-placeholder"></div>}
                     </div>
                     <div className="cart-card-info">
-                      <span className="product-name">{item.name}</span>
-                      <span className="product-unit-price">€{item.sell_price.toFixed(2)} / un</span>
+                      <span className="product-name">
+                        {item.name} 
+                        {item.is_offer && <span style={{marginLeft: '8px', fontSize:'0.7rem', background:'#dcfce7', color:'#166534', padding:'2px 6px', borderRadius:'4px', fontWeight:'bold'}}>OFERTA 🎁</span>}
+                      </span>
+                      
+                      <span className="product-unit-price">
+                        {item.is_offer ? (
+                          <>
+                            <span style={{textDecoration: 'line-through', color:'#94a3b8', marginRight:'5px'}}>€{item.sell_price.toFixed(2)}</span>
+                            <span style={{color:'#166534', fontWeight:'bold'}}>€0.00</span>
+                          </>
+                        ) : (
+                          `€${item.sell_price.toFixed(2)} / un`
+                        )}
+                      </span>
                     </div>
                   </div>
+                  
                   <div className="cart-card-controls">
                     <div className="qty-picker">
                       <button onClick={() => updateQuantity(item.id, -1)}><Minus size={14}/></button>
                       <span>{item.qty}</span>
                       <button onClick={() => updateQuantity(item.id, 1)}><Plus size={14}/></button>
                     </div>
-                    <span className="item-total">€{(item.sell_price * item.qty).toFixed(2)}</span>
+
+                    <span className="item-total">
+                      €{(item.is_offer ? 0 : item.sell_price * item.qty).toFixed(2)}
+                    </span>
+
+                    <button 
+                      className="action-btn offer-btn" 
+                      onClick={() => toggleOffer(item.id)}
+                      title={item.is_offer ? "Remover Oferta" : "Marcar como Oferta"}
+                      style={{ color: item.is_offer ? '#166534' : '#94a3b8', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                    >
+                      <Gift size={18} fill={item.is_offer ? "#dcfce7" : "none"} />
+                    </button>
+
                     <button className="remove-btn" onClick={() => removeFromCart(item.id)}>
                       <Trash2 size={18} />
                     </button>
@@ -246,9 +326,18 @@ export default function POS() {
         </div>
       </div>
 
-      {/* ÁREA DE RESUMO (Grid Area: summary) */}
+      {/* ÁREA DE RESUMO */}
       <div className="pos-area-summary">
         <div className="sidebar-card summary-card">
+          <div className="summary-row">
+            <span>Canal</span>
+            <span style={{
+              fontWeight: 'bold', 
+              color: saleChannel === 'Shopify' ? '#9333ea' : '#0f172a'
+            }}>
+              {saleChannel === 'Shopify' ? '🌐 Shopify' : '🏢 Loja Física'}
+            </span>
+          </div>
           <div className="summary-row">
             <span>Subtotal</span>
             <span>€{getTotal().toFixed(2)}</span>
