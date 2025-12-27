@@ -1,34 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Plus, Search, Trash2, X, ChevronDown, ChevronRight, Package, DollarSign } from 'lucide-react';
+import { Plus, Search, Trash2, X, ChevronDown, ChevronRight, Package } from 'lucide-react';
+
+// Importar o ficheiro CSS específico
+import '../styles/b2b.css';
 
 export default function B2B() {
   const [activeTab, setActiveTab] = useState('transactions');
   const [partners, setPartners] = useState([]);
-  const [deliveries, setDeliveries] = useState([]); // Agora chamamos deliveries
+  const [deliveries, setDeliveries] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Estado para expandir linhas da tabela
   const [expandedRows, setExpandedRows] = useState({});
 
   // Formulário Parceiro
   const [newPartner, setNewPartner] = useState({ name: '', location: '', contact_person: '', email: '', phone: '', start_date: '', default_commission: 0 });
 
-  // --- ESTADOS PARA O NOVO FORMULÁRIO COMPLEXO ---
-  // 1. Dados Gerais da Entrega
+  // Formulário Entrega
   const [deliveryHeader, setDeliveryHeader] = useState({
     partner_id: '', delivery_date: '', payment_deadline: '', payment_status: 'Pendente'
   });
 
-  // 2. Item que está a ser escrito agora
   const [currentItem, setCurrentItem] = useState({
     sku: '', qty_delivered: 0, current_stock: 0, 
     sales_count: 0, total_sales_value: 0, commission_rate: 0
   });
 
-  // 3. Lista de itens já adicionados (carrinho temporário)
   const [cartItems, setCartItems] = useState([]);
 
   useEffect(() => {
@@ -56,12 +55,10 @@ export default function B2B() {
     setLoading(false);
   };
 
-  // --- LÓGICA DE ITENS ---
   const addItemToCart = (e) => {
-    e.preventDefault(); // Previne submit do form principal
+    e.preventDefault(); 
     if (!currentItem.sku) return alert("Preencha o SKU");
 
-    // Calcular comissões deste item
     const commTotal = currentItem.sales_count * currentItem.commission_rate;
     
     const itemToAdd = {
@@ -72,7 +69,6 @@ export default function B2B() {
 
     setCartItems([...cartItems, itemToAdd]);
     
-    // Limpar campos do item, mantendo a comissão base para facilitar
     setCurrentItem({
       sku: '', qty_delivered: 0, current_stock: 0, 
       sales_count: 0, total_sales_value: 0, 
@@ -86,16 +82,13 @@ export default function B2B() {
     setCartItems(newCart);
   };
 
-  // --- SUBMIT FINAL ---
   const handleCreateDelivery = async (e) => {
     e.preventDefault();
     if (cartItems.length === 0) return alert("Adicione pelo menos um produto (SKU) à lista.");
 
-    // 1. Calcular Total Geral a Receber
     const totalReceivable = cartItems.reduce((acc, item) => acc + item.receivable_part, 0);
 
     try {
-      // 2. Inserir a Entrega (Cabeçalho)
       const { data: delData, error: delError } = await supabase
         .from('b2b_deliveries')
         .insert([{
@@ -107,7 +100,6 @@ export default function B2B() {
 
       if (delError) throw delError;
 
-      // 3. Preparar itens com o ID da entrega
       const itemsToInsert = cartItems.map(item => ({
         delivery_id: delData.id,
         sku: item.sku,
@@ -119,7 +111,6 @@ export default function B2B() {
         commission_total: item.commission_total
       }));
 
-      // 4. Inserir Itens
       const { error: itemsError } = await supabase
         .from('b2b_delivery_items')
         .insert(itemsToInsert);
@@ -138,12 +129,10 @@ export default function B2B() {
     }
   };
 
-  // --- OUTRAS FUNÇÕES ---
   const handlePartnerSelect = (e) => {
     const pid = e.target.value;
     const partner = partners.find(p => p.id === pid);
     setDeliveryHeader({ ...deliveryHeader, partner_id: pid });
-    // Define comissão base para o primeiro item
     if(partner) setCurrentItem(prev => ({ ...prev, commission_rate: partner.default_commission }));
   };
 
@@ -154,6 +143,7 @@ export default function B2B() {
       alert('Parceiro criado!');
       setShowModal(false);
       fetchData();
+      setNewPartner({ name: '', location: '', contact_person: '', email: '', phone: '', start_date: '', default_commission: 0 });
     }
   };
 
@@ -172,24 +162,41 @@ export default function B2B() {
     await supabase.from('b2b_deliveries').delete().eq('id', id);
     fetchData();
   };
+  
+  const deletePartner = async (id) => {
+    if(!window.confirm("Apagar parceiro? Isto pode apagar o histórico dele.")) return;
+    await supabase.from('b2b_partners').delete().eq('id', id);
+    fetchData();
+  };
 
-  // Filtros
   const filteredDeliveries = deliveries.filter(d => 
     d.b2b_partners?.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="page">
-      <div className="dashboard-header">
-        <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
+      
+      {/* --- CABEÇALHO B2B NOVO --- */}
+      <div className="b2b-header">
+        <div className="b2b-header-left">
           <h2>Gestão B2B</h2>
-          <div className="tab-switcher">
-            <button className={`page-btn ${activeTab === 'transactions' ? 'active-tab' : ''}`} onClick={() => setActiveTab('transactions')}>Entregas/Registos</button>
-            <button className={`page-btn ${activeTab === 'partners' ? 'active-tab' : ''}`} onClick={() => setActiveTab('partners')}>Parceiros</button>
+          <div className="b2b-tabs">
+            <button 
+              className={`b2b-tab ${activeTab === 'transactions' ? 'active' : ''}`} 
+              onClick={() => setActiveTab('transactions')}
+            >
+              Entregas
+            </button>
+            <button 
+              className={`b2b-tab ${activeTab === 'partners' ? 'active' : ''}`} 
+              onClick={() => setActiveTab('partners')}
+            >
+              Parceiros
+            </button>
           </div>
         </div>
-        <button className="submit-btn-modern" style={{width: 'auto'}} onClick={() => setShowModal(true)}>
-          <Plus size={18} style={{marginRight:5}}/> Novo {activeTab === 'transactions' ? 'Registo' : 'Parceiro'}
+        <button className="btn-primary-small" onClick={() => setShowModal(true)}>
+          <Plus size={18} /> Novo {activeTab === 'transactions' ? 'Registo' : 'Parceiro'}
         </button>
       </div>
 
@@ -223,12 +230,9 @@ export default function B2B() {
                       <td style={{textAlign:'center'}}>
                         {expandedRows[d.id] ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
                       </td>
-                      <td>
-                        <strong>{d.b2b_partners?.name}</strong>
-                      </td>
+                      <td><strong>{d.b2b_partners?.name}</strong></td>
                       <td>{new Date(d.delivery_date).toLocaleDateString()}</td>
                       <td>
-                        {/* Mostra um resumo rápido dos SKUs */}
                         <div style={{fontSize:'0.85rem', color:'#64748b'}}>
                           {d.b2b_delivery_items.length} produto(s): {d.b2b_delivery_items.map(i => i.sku).join(', ')}
                         </div>
@@ -248,36 +252,36 @@ export default function B2B() {
                       </td>
                     </tr>
                     
-                    {/* LINHA EXPANDIDA COM OS ITENS */}
+                    {/* LINHA EXPANDIDA */}
                     {expandedRows[d.id] && (
-                      <tr style={{background: '#f1f5f9'}}>
-                        <td colSpan="8" style={{padding: '10px 20px'}}>
-                          <div style={{background: 'white', borderRadius: '8px', padding: '15px', border:'1px solid #e2e8f0'}}>
-                            <h5 style={{margin:'0 0 10px 0', display:'flex', alignItems:'center', gap:'5px'}}><Package size={16}/> Detalhes dos Produtos</h5>
-                            <table style={{width:'100%', fontSize:'0.9rem'}}>
+                      <tr className="expanded-row-bg">
+                        <td colSpan="8" className="nested-details-container">
+                          <div className="nested-card">
+                            <h5 className="nested-header"><Package size={16}/> Detalhes dos Produtos</h5>
+                            <table className="nested-table">
                               <thead>
-                                <tr style={{background:'#f8fafc'}}>
-                                  <th style={{padding:'8px'}}>SKU</th>
-                                  <th style={{padding:'8px'}}>Entregue</th>
-                                  <th style={{padding:'8px'}}>Stock Atual</th>
-                                  <th style={{padding:'8px'}}>Vendas</th>
-                                  <th style={{padding:'8px'}}>Faturação</th>
-                                  <th style={{padding:'8px'}}>Comissão (Total)</th>
-                                  <th style={{padding:'8px'}}>Líquido Item</th>
+                                <tr>
+                                  <th>SKU</th>
+                                  <th>Entregue</th>
+                                  <th>Stock Atual</th>
+                                  <th>Vendas</th>
+                                  <th>Faturação</th>
+                                  <th>Comissão (Total)</th>
+                                  <th>Líquido Item</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {d.b2b_delivery_items.map(item => {
                                   const itemNet = item.total_sales_value - item.commission_total;
                                   return (
-                                    <tr key={item.id} style={{borderBottom:'1px solid #f1f5f9'}}>
-                                      <td style={{padding:'8px', fontWeight:500}}>{item.sku}</td>
-                                      <td style={{padding:'8px'}}>{item.qty_delivered}</td>
-                                      <td style={{padding:'8px'}}>{item.current_stock}</td>
-                                      <td style={{padding:'8px'}}>{item.sales_count}</td>
-                                      <td style={{padding:'8px'}}>€ {item.total_sales_value}</td>
-                                      <td style={{padding:'8px', color:'#ef4444'}}>€ {item.commission_total}</td>
-                                      <td style={{padding:'8px', fontWeight:'bold', color:'#10b981'}}>€ {itemNet.toFixed(2)}</td>
+                                    <tr key={item.id}>
+                                      <td style={{fontWeight:500}}>{item.sku}</td>
+                                      <td>{item.qty_delivered}</td>
+                                      <td>{item.current_stock}</td>
+                                      <td>{item.sales_count}</td>
+                                      <td>€ {item.total_sales_value}</td>
+                                      <td style={{color:'#ef4444'}}>€ {item.commission_total}</td>
+                                      <td style={{fontWeight:'bold', color:'#10b981'}}>€ {itemNet.toFixed(2)}</td>
                                     </tr>
                                   );
                                 })}
@@ -307,7 +311,7 @@ export default function B2B() {
                     <td><strong>{p.name}</strong></td>
                     <td>{p.location}</td>
                     <td>€ {p.default_commission} / lata</td>
-                    <td><button className="delete-btn"><Trash2 size={16}/></button></td>
+                    <td><button onClick={() => deletePartner(p.id)} className="delete-btn"><Trash2 size={16}/></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -319,14 +323,14 @@ export default function B2B() {
       {/* --- MODAL --- */}
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{maxWidth: '800px', width: '95%'}}> {/* Modal mais largo */}
+          <div className="modal-content" style={{maxWidth: '800px', width: '95%'}}>
             <div className="modal-header">
               <h3>{activeTab === 'transactions' ? 'Nova Entrega B2B' : 'Novo Parceiro'}</h3>
               <button onClick={() => setShowModal(false)} className="close-modal"><X size={20}/></button>
             </div>
             
             {activeTab === 'partners' ? (
-              // FORMULÁRIO SIMPLES DE PARCEIRO
+              // --- FORM PARCEIRO ---
               <form onSubmit={handleCreatePartner} className="modern-form">
                 <input placeholder="Nome Estabelecimento" value={newPartner.name} onChange={e => setNewPartner({...newPartner, name: e.target.value})} required />
                 <input placeholder="Localização" value={newPartner.location} onChange={e => setNewPartner({...newPartner, location: e.target.value})} />
@@ -334,12 +338,12 @@ export default function B2B() {
                 <button className="submit-btn-modern">Guardar</button>
               </form>
             ) : (
-              // --- FORMULÁRIO COMPLEXO DE ENTREGA ---
+              // --- FORM ENTREGA COMPLEXO ---
               <div className="modern-form" style={{maxHeight:'80vh', overflowY:'auto'}}>
                 
-                {/* 1. CABEÇALHO DA ENTREGA */}
-                <div style={{background:'#f8fafc', padding:'15px', borderRadius:'8px', marginBottom:'15px'}}>
-                  <h4 style={{marginTop:0}}>1. Dados da Entrega</h4>
+                {/* Secção 1 */}
+                <div className="b2b-form-section">
+                  <h4 className="b2b-form-title">1. Dados da Entrega</h4>
                   <div className="form-row-grid">
                     <div className="input-group">
                       <label>Estabelecimento</label>
@@ -359,9 +363,9 @@ export default function B2B() {
                   </div>
                 </div>
 
-                {/* 2. ADICIONAR ITENS */}
-                <div style={{border:'1px solid #e2e8f0', padding:'15px', borderRadius:'8px', marginBottom:'15px'}}>
-                  <h4 style={{marginTop:0}}>2. Adicionar Produtos (SKUs)</h4>
+                {/* Secção 2 */}
+                <div className="b2b-form-section">
+                  <h4 className="b2b-form-title">2. Adicionar Produtos (SKUs)</h4>
                   
                   <div className="form-row-grid">
                     <div className="input-group"><label>SKU (Nome Produto)</label><input placeholder="Ex: ZYN 10mg" value={currentItem.sku} onChange={e => setCurrentItem({...currentItem, sku: e.target.value})} /></div>
@@ -378,31 +382,31 @@ export default function B2B() {
                     <div className="input-group"><label>Total Vendas (€)</label><input type="number" step="0.01" value={currentItem.total_sales_value} onChange={e => setCurrentItem({...currentItem, total_sales_value: e.target.value})} /></div>
                   </div>
 
-                  <button onClick={addItemToCart} className="page-btn" style={{width:'100%', marginTop:'15px', justifyContent:'center', background:'#eff6ff', border:'1px solid #bfdbfe', color:'#2563eb'}}>
+                  <button onClick={addItemToCart} className="btn-add-item">
                     <Plus size={16}/> Adicionar Produto à Lista
                   </button>
                 </div>
 
-                {/* 3. LISTA DE ITENS (CARRINHO) */}
+                {/* Secção 3 - Lista */}
                 {cartItems.length > 0 && (
                   <div style={{marginBottom:'20px'}}>
-                    <h4 style={{marginTop:0}}>Resumo da Entrega</h4>
-                    <table style={{width:'100%', fontSize:'0.85rem', borderCollapse:'collapse'}}>
-                      <thead style={{background:'#f1f5f9'}}>
+                    <h4 className="b2b-form-title">Resumo da Entrega</h4>
+                    <table className="b2b-summary-table">
+                      <thead>
                         <tr>
-                          <th style={{padding:5, textAlign:'left'}}>SKU</th>
-                          <th style={{padding:5}}>Vendas</th>
-                          <th style={{padding:5}}>Líquido</th>
-                          <th style={{padding:5}}></th>
+                          <th>SKU</th>
+                          <th style={{textAlign:'center'}}>Vendas</th>
+                          <th style={{textAlign:'center'}}>Líquido</th>
+                          <th></th>
                         </tr>
                       </thead>
                       <tbody>
                         {cartItems.map((item, idx) => (
-                          <tr key={idx} style={{borderBottom:'1px solid #f1f5f9'}}>
-                            <td style={{padding:5}}>{item.sku}</td>
-                            <td style={{padding:5, textAlign:'center'}}>{item.sales_count}</td>
-                            <td style={{padding:5, textAlign:'center', fontWeight:'bold'}}>€ {item.receivable_part.toFixed(2)}</td>
-                            <td style={{padding:5, textAlign:'right'}}>
+                          <tr key={idx}>
+                            <td>{item.sku}</td>
+                            <td style={{textAlign:'center'}}>{item.sales_count}</td>
+                            <td style={{textAlign:'center', fontWeight:'bold'}}>€ {item.receivable_part.toFixed(2)}</td>
+                            <td style={{textAlign:'right'}}>
                               <button onClick={() => removeItemFromCart(idx)} style={{color:'#ef4444', background:'none', border:'none', cursor:'pointer'}}>X</button>
                             </td>
                           </tr>
@@ -410,7 +414,7 @@ export default function B2B() {
                       </tbody>
                     </table>
                     
-                    <div style={{textAlign:'right', marginTop:'10px', fontSize:'1.1rem', fontWeight:'bold', color:'#166534'}}>
+                    <div className="b2b-total-display">
                       Total a Receber: € {cartItems.reduce((acc, i) => acc + i.receivable_part, 0).toFixed(2)}
                     </div>
                   </div>
