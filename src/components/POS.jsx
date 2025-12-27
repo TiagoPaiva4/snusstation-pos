@@ -212,7 +212,6 @@ export default function POS() {
                       </div>
                       <div className="result-info">
                         <span className="result-name">{p.name}</span>
-                        <span className="result-stock">Stock: {p.stock} un</span>
                       </div>
                     </div>
                     <span className="result-price">€{p.sell_price.toFixed(2)}</span>

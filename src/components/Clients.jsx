@@ -1,154 +1,249 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { Search, UserPlus, Phone, MapPin, Mail, Trash2, Pencil, X, User } from 'lucide-react';
+
+// Reutilizamos o CSS global ou de produtos se quiseres, mas as classes do index.css funcionam aqui
+import '../index.css'; 
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', location: '' });
-  const [search, setSearch] = useState('');
-  const [viewHistory, setViewHistory] = useState(null); // ID do cliente para ver histórico
-  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // --- CONTROLAR VISIBILIDADE DO FORM ---
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    location: ''
+  });
 
   useEffect(() => {
     fetchClients();
   }, []);
 
   const fetchClients = async () => {
-    const { data } = await supabase.from('clients').select('*').order('name');
-    setClients(data || []);
+    setLoading(true);
+    // BUSCAR CLIENTES E AS SUAS VENDAS PARA SOMAR O TOTAL
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*, sales(total_amount)')
+      .order('name');
+    
+    if (error) console.error(error);
+    else setClients(data || []);
+    setLoading(false);
   };
 
-  const handleSubmit = async (e) => {
+  // --- ABRIR FORMULÁRIO (NOVO) ---
+  const handleNewClient = () => {
+    setFormData({ name: '', email: '', phone: '', location: '' });
+    setEditingId(null);
+    setShowForm(true);
+  };
+
+  // --- ABRIR FORMULÁRIO (EDITAR) ---
+  const handleEdit = (client) => {
+    setFormData({
+      name: client.name,
+      email: client.email || '',
+      phone: client.phone || '',
+      location: client.location || ''
+    });
+    setEditingId(client.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // --- FECHAR FORMULÁRIO ---
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setFormData({ name: '', email: '', phone: '', location: '' });
+  };
+
+  // --- GUARDAR ---
+  const handleSave = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.from('clients').insert([form]);
-    if (error) {
-      alert('Erro ao adicionar cliente: ' + error.message);
-    } else {
-      setForm({ name: '', email: '', phone: '', location: '' });
+    if (!formData.name) return alert("O nome é obrigatório.");
+
+    try {
+      if (editingId) {
+        const { error } = await supabase.from('clients').update(formData).eq('id', editingId);
+        if (error) throw error;
+        alert("Cliente atualizado!");
+      } else {
+        const { error } = await supabase.from('clients').insert([formData]);
+        if (error) throw error;
+        alert("Cliente criado!");
+      }
+      handleCancel();
       fetchClients();
+    } catch (error) {
+      alert("Erro: " + error.message);
     }
   };
 
-  const handleViewHistory = async (clientId) => {
-    if (viewHistory === clientId) {
-      setViewHistory(null); // Fechar se já estiver aberto
-      setHistory([]);
-      return;
-    }
-    
-    setViewHistory(clientId);
-    // Buscar histórico de vendas deste cliente
-    const { data } = await supabase
-      .from('sales')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false });
-    
-    setHistory(data || []);
+  const handleDelete = async (id) => {
+    if (!window.confirm("Apagar este cliente?")) return;
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (!error) fetchClients();
   };
 
-  const filtered = clients.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
-    (c.email && c.email.toLowerCase().includes(search.toLowerCase()))
+  // Função auxiliar para calcular total gasto
+  const calculateTotalSpent = (salesList) => {
+    if (!salesList || salesList.length === 0) return 0;
+    return salesList.reduce((acc, sale) => acc + (sale.total_amount || 0), 0);
+  };
+
+  const filteredClients = clients.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="page">
-      <h2>Gestão de Clientes</h2>
-      
-      <div className="management-grid">
-        {/* Formulário de Adição */}
-        <form onSubmit={handleSubmit} className="entry-form">
-          <h3>Novo Cliente</h3>
-          <input 
-            placeholder="Nome" 
-            value={form.name} 
-            onChange={e => setForm({...form, name: e.target.value})} 
-            required 
-          />
-          <input 
-            type="email" 
-            placeholder="Email" 
-            value={form.email} 
-            onChange={e => setForm({...form, email: e.target.value})} 
-          />
-          <div className="row">
-            <input 
-              placeholder="Telefone" 
-              value={form.phone} 
-              onChange={e => setForm({...form, phone: e.target.value})} 
-            />
-            <input 
-              placeholder="Localidade" 
-              value={form.location} 
-              onChange={e => setForm({...form, location: e.target.value})} 
-            />
-          </div>
-          <button type="submit">Adicionar Cliente</button>
-        </form>
+      {/* CABEÇALHO */}
+      <div className="dashboard-header" style={{flexDirection: 'row', justifyContent:'space-between', alignItems:'center'}}>
+        <h2>Gestão de Clientes <span style={{fontSize:'1rem', color:'#64748b', fontWeight:'normal'}}>({clients.length})</span></h2>
+        
+        {!showForm && (
+          <button onClick={handleNewClient} className="submit-btn-modern" style={{width: 'auto', display:'flex', gap:'5px', alignItems:'center'}}>
+            <UserPlus size={18} /> Novo Cliente
+          </button>
+        )}
+      </div>
 
-        {/* Lista de Clientes */}
-        <div className="list-view">
-          <input 
-            className="search-bar" 
-            placeholder="Pesquisar cliente (nome ou email)..." 
-            value={search} 
-            onChange={e => setSearch(e.target.value)} 
-          />
-          <table>
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>Contacto</th>
-                <th>Localidade</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(client => (
-                <React.Fragment key={client.id}>
-                  <tr>
-                    <td>{client.name}</td>
-                    <td>
-                      {client.email}<br/>
-                      <small>{client.phone}</small>
-                    </td>
-                    <td>{client.location}</td>
-                    <td>
-                      <button 
-                        onClick={() => handleViewHistory(client.id)}
-                        style={{ fontSize: '0.8rem', padding: '5px 10px' }}
-                      >
-                        {viewHistory === client.id ? 'Fechar' : 'Histórico'}
-                      </button>
-                    </td>
-                  </tr>
-                  {/* Linha expandida para mostrar histórico */}
-                  {viewHistory === client.id && (
-                    <tr style={{ background: '#f8fafc' }}>
-                      <td colSpan="4">
-                        <div style={{ padding: '10px' }}>
-                          <strong>Histórico de Compras:</strong>
-                          {history.length > 0 ? (
-                            <ul style={{ listStyle: 'none', padding: 0, marginTop: '10px' }}>
-                              {history.map(sale => (
-                                <li key={sale.id} style={{ borderBottom: '1px solid #e2e8f0', padding: '5px 0' }}>
-                                  Data: {new Date(sale.created_at).toLocaleDateString()} — 
-                                  Total: <strong>€ {sale.total_amount.toFixed(2)}</strong> 
-                                  (Lucro: € {sale.total_profit.toFixed(2)})
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p style={{ color: '#64748b' }}>Nenhuma compra registada.</p>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+      {/* LAYOUT GRID (Igual aos Produtos) */}
+      <div className="management-grid" style={{ gridTemplateColumns: showForm ? '350px 1fr' : '1fr' }}>
+        
+        {/* FORMULÁRIO */}
+        {showForm && (
+          <div className="form-container">
+            <form onSubmit={handleSave} className="modern-form">
+              <div className="form-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <div>
+                  <h3>{editingId ? 'Editar Cliente' : 'Novo Cliente'}</h3>
+                  <p>{editingId ? 'Atualizar dados' : 'Registar novo cliente'}</p>
+                </div>
+                <button type="button" onClick={handleCancel} style={{background:'none', border:'none', cursor:'pointer', color:'#64748b'}}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="input-group">
+                <label>Nome Completo</label>
+                <div className="input-wrapper">
+                  <User size={16} className="input-icon"/>
+                  <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Nome do Cliente" />
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label>Email</label>
+                <div className="input-wrapper">
+                  <Mail size={16} className="input-icon"/>
+                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="email@exemplo.com" />
+                </div>
+              </div>
+
+              <div className="form-row-grid">
+                <div className="input-group">
+                  <label>Telefone</label>
+                  <div className="input-wrapper">
+                    <Phone size={16} className="input-icon"/>
+                    <input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="912 345 678" />
+                  </div>
+                </div>
+                <div className="input-group">
+                  <label>Localidade</label>
+                  <div className="input-wrapper">
+                    <MapPin size={16} className="input-icon"/>
+                    <input value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="Lisboa" />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+                <button type="submit" className="submit-btn-modern" style={{flex:1}}>
+                  {editingId ? 'Atualizar' : 'Guardar'}
+                </button>
+                <button type="button" onClick={handleCancel} className="submit-btn-modern" style={{width:'auto', background: '#e2e8f0', color: '#64748b'}}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* LISTA DE CLIENTES */}
+        <div className="list-container">
+          <div className="list-header">
+            <div style={{position:'relative', width:'300px'}}>
+              <Search size={18} style={{position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'#94a3b8'}}/>
+              <input 
+                className="search-bar" 
+                placeholder="Pesquisar clientes..." 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)} 
+                style={{margin:0, paddingLeft:35}}
+              />
+            </div>
+          </div>
+
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Contacto</th>
+                  <th>Localização</th>
+                  <th>Total Gasto</th> {/* NOVA COLUNA */}
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredClients.length === 0 ? (
+                  <tr><td colSpan="5" style={{textAlign:'center', padding:'20px'}}>Nenhum cliente encontrado.</td></tr>
+                ) : (
+                  filteredClients.map(client => {
+                    // Calcular Total Gasto
+                    const totalSpent = calculateTotalSpent(client.sales);
+                    
+                    return (
+                      <tr key={client.id} style={{background: editingId === client.id ? '#fffbeb' : 'transparent'}}>
+                        <td>
+                          <strong>{client.name}</strong><br/>
+                          <small style={{color:'#64748b'}}>{client.email}</small>
+                        </td>
+                        <td>{client.phone || '-'}</td>
+                        <td>{client.location || '-'}</td>
+                        
+                        {/* VALOR GASTO */}
+                        <td style={{fontWeight:'bold', color: totalSpent > 0 ? '#10b981' : '#64748b'}}>
+                          € {totalSpent.toFixed(2)}
+                        </td>
+
+                        <td>
+                          <div style={{display:'flex', gap:'10px'}}>
+                            <button onClick={() => handleEdit(client)} style={{background:'none', border:'none', cursor:'pointer', color:'#64748b'}}>
+                              <Pencil size={18}/>
+                            </button>
+                            <button onClick={() => handleDelete(client.id)} style={{background:'none', border:'none', cursor:'pointer', color:'#ef4444'}}>
+                              <Trash2 size={18}/>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
