@@ -1,0 +1,50 @@
+.management-grid { display: grid; grid-template-columns: 350px 1fr; gap: 25px; align-items: start; width: 100%; transition: all 0.3s ease; }
+.list-container { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; width: 100%; }
+.list-header { padding: 15px 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.table-wrapper { overflow-x: auto; width: 100%; }
+
+/* Formulário Genérico */
+.form-container { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); overflow: hidden; height: fit-content; position: sticky; top: 20px; animation: slideInLeft 0.3s ease-out; }
+.modern-form { padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+.form-header h3 { margin: 0; font-size: 1.1rem; color: #0f172a; }
+.form-header p { margin: 2px 0 0 0; font-size: 0.85rem; color: #64748b; }
+.image-upload-box { border: 2px dashed #cbd5e1; border-radius: 10px; min-height: 120px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #f8fafc; transition: all 0.2s; position: relative; overflow: hidden; }
+.image-upload-box:hover { background: #f1f5f9; border-color: #2563eb; }
+.image-upload-box.has-image { border-style: solid; padding: 0; }
+.image-preview-container { width: 100%; height: 160px; }
+.image-preview-container img { width: 100%; height: 100%; object-fit: cover; }
+.remove-image-btn { position: absolute; top: 8px; right: 8px; background: white; border: none; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ef4444; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #64748b; font-size: 0.9rem; }
+.form-row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.input-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 5px; }
+.input-wrapper { position: relative; display: flex; align-items: center; }
+.input-icon { position: absolute; left: 10px; color: #94a3b8; width: 16px; }
+.modern-form input { width: 100%; padding: 10px 10px 10px 34px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; transition: border-color 0.2s; background: white; color: #0f172a; }
+.modern-form input:not([class*="input-wrapper"]) { padding-left: 10px; }
+.modern-form input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+.submit-btn-modern { background: #0f172a; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 5px; transition: background 0.2s; }
+.submit-btn-modern:hover { background: #1e293b; }
+
+.pagination-controls { display: flex; align-items: center; gap: 15px; margin-left: auto; font-size: 0.9rem; color: #64748b; }
+.page-btn { background: white; border: 1px solid #e2e8f0; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; color: #0f172a; transition: 0.2s; }
+.page-btn:hover:not(:disabled) { border-color: #2563eb; color: #2563eb; }
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #f1f5f9; }
+
+.product-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; display: block; }
+.no-thumb { width: 40px; height: 40px; border-radius: 6px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; color: #cbd5e1; }
+
+.badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; display: inline-block; white-space: nowrap; }
+.badge-success { background: #dcfce7; color: #166534; }
+.badge-danger { background: #fee2e2; color: #991b1b; }
+.badge-neutral { background: #f1f5f9; color: #475569; }
+.badge-success-light { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.badge-danger-light { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 900px) {
+  .management-grid { grid-template-columns: 1fr !important; }
+}
