@@ -2,9 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Upload, X, Image as ImageIcon, Package, DollarSign, Tag, Pencil, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 
-// Importar o CSS específico
-import '../styles/Products.css';
-
 export default function Products() {
   const [products, setProducts] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -14,7 +11,7 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // --- NOVO ESTADO: CONTROLAR VISIBILIDADE DO FORM ---
+  // --- CONTROLAR VISIBILIDADE DO FORM ---
   const [showForm, setShowForm] = useState(false);
 
   // Estados de Paginação
@@ -64,13 +61,12 @@ export default function Products() {
     setImagePreview(null);
   };
 
-  // --- ALTERADO: ABRIR FORMULÁRIO ---
   const handleNewProduct = () => {
     setEditingId(null);
     setForm({ name: '', brand: '', buy_price: '', sell_price: '', stock: '' });
     setImage(null);
     setImagePreview(null);
-    setShowForm(true); // Mostra o form
+    setShowForm(true); 
   };
 
   const handleEditClick = (product) => {
@@ -84,17 +80,16 @@ export default function Products() {
     });
     setImagePreview(product.image_url);
     setImage(null);
-    setShowForm(true); // Mostra o form
+    setShowForm(true); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- ALTERADO: FECHAR FORMULÁRIO ---
   const handleCancelEdit = () => {
     setEditingId(null);
     setForm({ name: '', brand: '', buy_price: '', sell_price: '', stock: '' });
     setImage(null);
     setImagePreview(null);
-    setShowForm(false); // Esconde o form
+    setShowForm(false);
   };
 
   const handleSubmit = async (e) => {
@@ -144,7 +139,7 @@ export default function Products() {
     if (error) {
       alert('Erro ao salvar: ' + error.message);
     } else {
-      handleCancelEdit(); // Isto agora fecha o form também
+      handleCancelEdit();
       fetchProducts();
     }
     setUploading(false);
@@ -163,7 +158,6 @@ export default function Products() {
       <div className="dashboard-header" style={{flexDirection: 'row', justifyContent:'space-between', alignItems:'center'}}>
         <h2>Gestão de Produtos</h2>
         
-        {/* BOTÃO NOVO (Só aparece se o form estiver fechado) */}
         {!showForm && (
           <button onClick={handleNewProduct} className="submit-btn-modern" style={{width: 'auto', display:'flex', gap:'5px', alignItems:'center'}}>
             <Plus size={18} /> Novo Produto
@@ -171,13 +165,8 @@ export default function Products() {
         )}
       </div>
       
-      {/* LÓGICA DO LAYOUT:
-         Se showForm = true: Grid com 2 colunas (350px 1fr)
-         Se showForm = false: Grid com 1 coluna (1fr)
-      */}
       <div className="management-grid" style={{ gridTemplateColumns: showForm ? '350px 1fr' : '1fr' }}>
         
-        {/* SÓ MOSTRA SE showForm FOR TRUE */}
         {showForm && (
           <div className="form-container">
             <form onSubmit={handleSubmit} className="modern-form">
@@ -186,7 +175,6 @@ export default function Products() {
                   <h3>{editingId ? 'Editar Produto' : 'Novo Produto'}</h3>
                   <p>{editingId ? 'Altere os dados abaixo' : 'Adicionar ao inventário'}</p>
                 </div>
-                {/* Botão X para fechar */}
                 <button type="button" onClick={handleCancelEdit} style={{background:'none', border:'none', cursor:'pointer', color:'#64748b'}}>
                   <X size={20} />
                 </button>
@@ -213,20 +201,20 @@ export default function Products() {
                 <label>Nome</label>
                 <div className="input-wrapper">
                   <Tag className="input-icon" />
-                  <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required placeholder="Ex: Siberia Red" />
+                  <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
                 </div>
               </div>
 
               <div className="form-row-grid">
                 <div className="input-group">
                   <label>Marca</label>
-                  <input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} placeholder="Marca" />
+                  <input value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} />
                 </div>
                 <div className="input-group">
                   <label>Stock</label>
                   <div className="input-wrapper">
                     <Package className="input-icon" />
-                    <input type="number" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})} required placeholder="0" />
+                    <input type="number" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})} required />
                   </div>
                 </div>
               </div>
@@ -236,14 +224,14 @@ export default function Products() {
                   <label>Compra (€)</label>
                   <div className="input-wrapper">
                     <DollarSign className="input-icon" />
-                    <input type="number" step="0.01" value={form.buy_price} onChange={e => setForm({...form, buy_price: e.target.value})} required placeholder="0.00" />
+                    <input type="number" step="0.01" value={form.buy_price} onChange={e => setForm({...form, buy_price: e.target.value})} required />
                   </div>
                 </div>
                 <div className="input-group">
                   <label>Venda (€)</label>
                   <div className="input-wrapper">
                     <DollarSign className="input-icon" />
-                    <input type="number" step="0.01" value={form.sell_price} onChange={e => setForm({...form, sell_price: e.target.value})} required placeholder="0.00" />
+                    <input type="number" step="0.01" value={form.sell_price} onChange={e => setForm({...form, sell_price: e.target.value})} required />
                   </div>
                 </div>
               </div>
@@ -252,7 +240,6 @@ export default function Products() {
                 <button type="submit" disabled={uploading} className="submit-btn-modern" style={{flex:1, background: editingId ? '#f59e0b' : 'var(--dark)'}}>
                   {uploading ? 'A guardar...' : (editingId ? 'Atualizar' : 'Adicionar')}
                 </button>
-                {/* Botão Cancelar visível também em baixo */}
                 <button type="button" onClick={handleCancelEdit} className="submit-btn-modern" style={{width:'auto', background: '#e2e8f0', color: '#64748b'}}>
                   Cancelar
                 </button>
