@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { TrendingUp, DollarSign, ShoppingBag, Users, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingBag, Users, Clock, ArrowUpRight } from 'lucide-react';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({ 
@@ -11,21 +11,32 @@ export default function Dashboard() {
   });
   const [recentSales, setRecentSales] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState('Parceiro');
 
   useEffect(() => {
+    fetchUserData();
     fetchDashboardData();
   }, []);
+
+  const fetchUserData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      let name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0];
+      if (name) {
+        name = name.charAt(0).toUpperCase() + name.slice(1);
+        setUserName(name);
+      }
+    }
+  };
 
   const fetchDashboardData = async () => {
     setLoading(true);
     
-    // 1. Buscar TODAS as vendas para calcular totais (em produção real, usar RPC/Functions seria melhor)
     const { data: allSales } = await supabase
       .from('sales')
       .select('total_amount, total_profit');
 
-    // 2. Buscar as últimas 10 vendas com o nome do cliente
-    const { data: lastSales, error } = await supabase
+    const { data: lastSales } = await supabase
       .from('sales')
       .select('*, clients(name)')
       .order('created_at', { ascending: false })
@@ -52,14 +63,12 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  // Componente de Cartão de Estatística
   const StatCard = ({ title, value, subValue, icon: Icon, colorClass }) => (
     <div className="stat-card">
       <div className="stat-header">
         <div className={`icon-wrapper ${colorClass}`}>
           <Icon size={24} />
         </div>
-        {/* Simulação de tendência positiva para visual */}
         <span className="trend positive">
           <ArrowUpRight size={16} /> +2.5%
         </span>
@@ -75,10 +84,19 @@ export default function Dashboard() {
   return (
     <div className="page dashboard-page">
       <div className="dashboard-header">
-        <h2>Visão Geral</h2>
-        <p className="date-display">
-          <Clock size={16} /> {new Date().toLocaleDateString('pt-PT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
+        {/* 1. DATA NO CANTO SUPERIOR DIREITO */}
+        <div className="header-top-right">
+          <p className="date-display">
+            <Clock size={16} /> {new Date().toLocaleDateString('pt-PT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+
+        {/* 2. MENSAGEM DE BOAS-VINDAS EM BAIXO */}
+        <div className="header-greeting">
+          <h2>
+            Olá <span style={{ color: '#2563eb' }}>{userName}</span>, bem-vindo ao POS da SnusStation
+          </h2>
+        </div>
       </div>
 
       {/* Grid de Estatísticas */}

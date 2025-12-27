@@ -10,7 +10,8 @@ import POS from './components/POS';
 import SalesHistory from './components/SalesHistory';
 import Analytics from './components/Analytics';
 import './App.css';
-import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2 } from 'lucide-react';
+import B2B from './components/B2B';
+import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase } from 'lucide-react'; // Adiciona Briefcase
 
 // --- IMPORTA O LOGO AQUI ---
 import logoImg from './assets/logo-navbar.png'; // <--- Confirma se o nome do ficheiro está igual!
@@ -76,6 +77,7 @@ function App() {
               <NavItem to="/sales" icon={History} label="Histórico" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/products" icon={Package} label="Produtos" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/clients" icon={Users} label="Clientes" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/b2b" icon={Briefcase} label="B2B (Excel)" onClick={() => setMobileMenuOpen(false)} />
             </nav>
             <button onClick={handleLogout} className="logout-btn">
               <LogOut size={20}/> Sair
@@ -91,6 +93,7 @@ function App() {
             <Route path="/sales" element={<SalesHistory />} />
             <Route path="/products" element={<Products />} />
             <Route path="/clients" element={<Clients />} />
+            <Route path="/b2b" element={<B2B />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>

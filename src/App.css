@@ -86,7 +86,28 @@ input, select, textarea {
 
 /* --- Dashboard --- */
 .dashboard-page { display: flex; flex-direction: column; gap: 30px; }
-.dashboard-header { display: flex; justify-content: space-between; align-items: flex-end; }
+
+/* Dashboard Header Ajustado (Data direita, Ola em baixo) */
+.dashboard-header { 
+  display: flex; 
+  flex-direction: column; /* Coloca um em cima do outro */
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.header-top-right {
+  display: flex;
+  justify-content: flex-end; /* Empurra a data para a direita */
+  width: 100%;
+}
+
+.header-greeting h2 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: var(--dark);
+  font-weight: 700;
+}
+
 .date-display { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 0.9rem; background: white; padding: 8px 16px; border-radius: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin: 0; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
@@ -255,69 +276,7 @@ tr:last-child td { border-bottom: none; }
 .time-select { border: none; font-size: 0.9rem; color: var(--dark); font-weight: 500; outline: none; background: transparent; cursor: pointer; }
 .stat-label { font-size: 0.85rem; color: #64748b; font-weight: 600; }
 
-/* --- MEDIA QUERIES (RESPONSIVIDADE) --- */
-@media (max-width: 900px) {
-  .app-container { flex-direction: column; height: auto; min-height: 100vh; }
-  
-  /* Sidebar Mobile: Barra Fixa no Topo */
-  .sidebar { 
-    width: 100%; 
-    height: var(--header-height-mobile); 
-    flex-direction: row; 
-    align-items: center; 
-    padding: 10px 20px; 
-    position: sticky; top: 0; z-index: 100;
-  }
-  
-  /* Botão à esquerda */
-  .sidebar-header-mobile {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    position: relative;
-  }
-
-  .mobile-menu-toggle { 
-    display: block; background: none; border: none; color: white; cursor: pointer; 
-    position: absolute; left: 0; top: 50%; transform: translateY(-50%); padding: 10px;
-  }
-  
-  /* Logo ao centro */
-  .logo { margin: 0; flex-grow: 0; }
-  .logo img { max-height: 40px; max-width: 150px; display: block; }
-
-  /* Menu Escondido (Slide-in) */
-  .sidebar-menu { 
-    position: fixed; top: var(--header-height-mobile); left: 0; width: 100%; height: calc(100vh - var(--header-height-mobile));
-    background: var(--dark); padding: 30px;
-    transform: translateX(-100%); transition: transform 0.3s ease-in-out;
-    display: flex; flex-direction: column; justify-content: space-between;
-  }
-  .sidebar-menu.open { transform: translateX(0); }
-
-  .nav-item { padding: 15px; font-size: 1.1rem; }
-  .logout-btn { padding: 15px; background: rgba(239, 68, 68, 0.1); margin-top: 20px; }
-
-  /* Ajustes de Conteúdo */
-  .content { padding: 15px; margin-top: 0; }
-  .management-grid { grid-template-columns: 1fr; gap: 20px; }
-  .form-container { position: relative; top: 0; }
-  
-  /* Ajustes POS Mobile */
-  .pos-container { flex-direction: column; overflow: visible; height: auto; }
-  .products-panel { height: 500px; flex: none; }
-  .cart-panel { 
-    width: 100%; max-width: none; min-width: 0; height: auto; margin-top: 20px; 
-    margin-bottom: 40px; 
-  }
-  .cart-item-modern { padding: 10px; gap: 10px; }
-  .item-total-price { font-size: 0.9rem; width: auto; }
-  .cart-item-controls { gap: 10px; }
-}
-
-/* --- LOGIN PAGE STYLES --- */
-
+/* --- LOGIN PAGE STYLES (NOVO) --- */
 .login-container {
   height: 100vh;
   width: 100vw;
@@ -501,7 +460,7 @@ tr:last-child td { border-bottom: none; }
   color: #94a3b8;
 }
 
-/* Responsividade */
+/* Responsividade Login */
 @media (max-width: 480px) {
   .login-card {
     padding: 30px 20px;
@@ -512,8 +471,80 @@ tr:last-child td { border-bottom: none; }
 /* --- Estilo do Logo no Login --- */
 .login-logo {
   display: block;
-  margin: 0 auto 20px auto; /* Centra e dá espaço em baixo */
-  max-width: 150px;         /* Largura máxima */
-  height: auto;             /* Mantém a proporção */
+  margin: 0 auto 20px auto; 
+  max-width: 150px;         
+  height: auto;             
   object-fit: contain;
+}
+
+/* --- MEDIA QUERIES (RESPONSIVIDADE GERAL) --- */
+@media (max-width: 900px) {
+  .app-container { flex-direction: column; height: auto; min-height: 100vh; }
+  
+  /* Sidebar Mobile: Barra Fixa no Topo */
+  .sidebar { 
+    width: 100%; 
+    height: var(--header-height-mobile); 
+    flex-direction: row; 
+    align-items: center; 
+    padding: 10px 20px; 
+    position: sticky; top: 0; z-index: 100;
+  }
+  
+  /* Botão à esquerda */
+  .sidebar-header-mobile {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    position: relative;
+  }
+
+  .mobile-menu-toggle { 
+    display: block; background: none; border: none; color: white; cursor: pointer; 
+    position: absolute; left: 0; top: 50%; transform: translateY(-50%); padding: 10px;
+  }
+  
+  /* Logo ao centro */
+  .logo { margin: 0; flex-grow: 0; }
+  .logo img { max-height: 40px; max-width: 150px; display: block; }
+
+  /* Menu Escondido (Slide-in) */
+  .sidebar-menu { 
+    position: fixed; top: var(--header-height-mobile); left: 0; width: 100%; height: calc(100vh - var(--header-height-mobile));
+    background: var(--dark); padding: 30px;
+    transform: translateX(-100%); transition: transform 0.3s ease-in-out;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .sidebar-menu.open { transform: translateX(0); }
+
+  .nav-item { padding: 15px; font-size: 1.1rem; }
+  .logout-btn { padding: 15px; background: rgba(239, 68, 68, 0.1); margin-top: 20px; }
+
+  /* Ajustes de Conteúdo */
+  .content { padding: 15px; margin-top: 0; }
+  .management-grid { grid-template-columns: 1fr; gap: 20px; }
+  .form-container { position: relative; top: 0; }
+  
+  /* Ajustes POS Mobile */
+  .pos-container { flex-direction: column; overflow: visible; height: auto; }
+  .products-panel { height: 500px; flex: none; }
+  .cart-panel { 
+    width: 100%; max-width: none; min-width: 0; height: auto; margin-top: 20px; 
+    margin-bottom: 40px; 
+  }
+  .cart-item-modern { padding: 10px; gap: 10px; }
+  .item-total-price { font-size: 0.9rem; width: auto; }
+  .cart-item-controls { gap: 10px; }
+}
+
+.tab-switcher {
+  display: flex;
+  gap: 10px;
+}
+
+.active-tab {
+  background-color: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
 }
