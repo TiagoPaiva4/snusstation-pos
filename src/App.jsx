@@ -11,16 +11,13 @@ import Analytics from './components/Analytics';
 import B2B from './components/B2B';
 import SetPassword from './components/SetPassword'; // <--- IMPORTAÇÃO NOVA
 import './App.css';
-<<<<<<< HEAD
+
 import B2B from './components/B2B';
 import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase } from 'lucide-react'; // Adiciona Briefcase
 
 // --- IMPORTA O LOGO AQUI ---
 import logoImg from './assets/logo-navbar.png'; // <--- Confirma se o nome do ficheiro está igual!
-=======
-import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase } from 'lucide-react';
-import logoImg from './assets/logo-navbar.png';
->>>>>>> 74f66b3 (feat: add SetPassword component for password recovery functionality)
+
 
 const NavItem = ({ to, icon: Icon, label, onClick }) => {
   const location = useLocation();
