@@ -28,29 +28,46 @@ function App() {
   const [session, setSession] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
-  const [loading, setLoading] = useState(true); // Novo estado de carregamento
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Verificar se é um link de Convite ou Recuperação logo ao iniciar
-    // Isto impede que o site mostre o Login erradamente
+    // --- PASSO CRÍTICO: DETETAR O LINK DO EMAIL IMEDIATAMENTE ---
     const hash = window.location.hash;
+    
+    // Verifica se é um link de convite (invite) ou recuperação (recovery)
+    // O Supabase envia algo como: #access_token=...&refresh_token=...&type=invite
     if (hash && (hash.includes('type=invite') || hash.includes('type=recovery'))) {
+      console.log("Modo de recuperação/convite detetado via URL");
       setRecoveryMode(true);
+      // Não paramos o loading aqui, deixamos o supabase processar a sessão em baixo
     }
 
-    // 2. Obter sessão inicial
+    // 1. Obter sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false);
+      
+      // Se tivermos sessão E estivermos em recovery mode, paramos o loading
+      // Se NÃO tivermos sessão, mas for recovery mode, esperamos que o onAuthStateChange trate disso
+      if (!hash.includes('type=invite')) {
+         setLoading(false);
+      }
     });
 
-    // 3. Escutar mudanças (Login, Logout, Links de Email)
+    // 2. Escutar mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Evento Auth:", event);
       setSession(session);
-      
-      if (event === 'PASSWORD_RECOVERY') {
-        setRecoveryMode(true);
+
+      // O evento PASSWORD_RECOVERY é disparado quando o utilizador clica no link do email
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        // Verificação dupla: se acabámos de entrar e o URL dizia que era convite
+        const currentHash = window.location.hash;
+        if (currentHash.includes('type=invite') || currentHash.includes('type=recovery') || event === 'PASSWORD_RECOVERY') {
+           setRecoveryMode(true);
+        }
       }
+      
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -60,11 +77,18 @@ function App() {
     await supabase.auth.signOut();
     setRecoveryMode(false);
     setMobileMenuOpen(false);
+    setSession(null);
   };
 
   // --- RENDERIZAÇÃO ---
 
-  // 1. Mostrar Loading enquanto verifica a sessão (Evita piscar o login)
+  // 1. Se detetámos que é um convite, mostramos o SetPassword IMEDIATAMENTE
+  // (Ignorando se a sessão ainda está a carregar ou se parece nula momentaneamente)
+  if (recoveryMode) {
+    return <SetPassword />;
+  }
+
+  // 2. Loading normal da aplicação
   if (loading) {
     return (
       <div style={{height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f1f5f9'}}>
@@ -73,32 +97,22 @@ function App() {
     );
   }
 
-  // 2. Se for link de convite/recuperação, mostra definir password
-  if (recoveryMode) {
-    return <SetPassword />;
-  }
-
-  // 3. Se não tiver sessão, mostra Login
+  // 3. Se não tem sessão e não é recuperação -> Login
   if (!session) {
     return <Login />;
   }
 
-  // 4. Se tiver sessão, mostra a App
+  // 4. Aplicação Normal (Dashboard, etc)
   return (
     <Router>
       <div className="app-container">
         
-        {/* SIDEBAR */}
         <aside className="sidebar">
           <div className="sidebar-header-mobile">
             <div className="logo">
               <img src={logoImg} alt="SnusStation" />
             </div>
-
-            <button 
-              className="mobile-menu-toggle" 
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
+            <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
             </button>
           </div>
@@ -119,7 +133,6 @@ function App() {
           </div>
         </aside>
 
-        {/* CONTEÚDO */}
         <main className="content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
