@@ -1,27 +1,41 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, ChevronDown, ChevronRight, Package, Trash2, User, Gift, Globe, Store } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Package, Trash2, User, Globe, Store, Edit, X, Save } from 'lucide-react';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState([]);
+  const [clients, setClients] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedRows, setExpandedRows] = useState({});
 
+  // Estados para Edição
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSale, setEditingSale] = useState(null);
+
   useEffect(() => {
-    fetchSales();
+    fetchData();
   }, []);
 
-  const fetchSales = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    
+    // 1. Buscar Vendas
+    const { data: salesData, error: salesError } = await supabase
       .from('sales')
-      .select('*, clients(name), sale_items(*, products(name))')
+      .select('*, clients(id, name), sale_items(*, products(name))')
       .order('created_at', { ascending: false });
 
-    if (error) console.error('Erro ao buscar vendas:', error);
-    else setSales(data || []);
+    if (salesError) console.error('Erro ao buscar vendas:', salesError);
+    else setSales(salesData || []);
+
+    // 2. Buscar Clientes
+    const { data: clientsData } = await supabase
+      .from('clients')
+      .select('id, name')
+      .order('name');
     
+    setClients(clientsData || []);
     setLoading(false);
   };
 
@@ -39,14 +53,47 @@ export default function SalesHistory() {
           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id);
         }
       }
-
       const { error } = await supabase.from('sales').delete().eq('id', sale.id);
       if (error) throw error;
 
       alert('Venda anulada e stock reposto.');
-      fetchSales();
+      fetchData();
     } catch (error) {
       alert('Erro ao anular venda: ' + error.message);
+    }
+  };
+
+  const handleEditClick = (sale, e) => {
+    e.stopPropagation(); 
+    setEditingSale({
+      id: sale.id,
+      created_at: sale.created_at.split('T')[0], 
+      client_id: sale.client_id || '',
+      sale_channel: sale.sale_channel || 'Fisica'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    try {
+      const { error } = await supabase
+        .from('sales')
+        .update({
+          created_at: editingSale.created_at,
+          client_id: editingSale.client_id === '' ? null : editingSale.client_id,
+          sale_channel: editingSale.sale_channel
+        })
+        .eq('id', editingSale.id);
+
+      if (error) throw error;
+
+      alert("Venda atualizada com sucesso!");
+      setShowEditModal(false);
+      fetchData(); 
+
+    } catch (error) {
+      alert("Erro ao atualizar: " + error.message);
     }
   };
 
@@ -81,7 +128,7 @@ export default function SalesHistory() {
               <tr>
                 <th style={{width: '40px'}}></th>
                 <th>Data</th>
-                <th>Canal</th> {/* NOVA COLUNA */}
+                <th>Canal</th>
                 <th>Vendedor</th>
                 <th>Cliente</th>
                 <th>Total</th>
@@ -104,17 +151,13 @@ export default function SalesHistory() {
                       <td style={{textAlign: 'center'}}>
                         {expandedRows[sale.id] ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
                       </td>
+                      
                       <td>
                         <span style={{fontWeight: 500}}>
                           {new Date(sale.created_at).toLocaleDateString()}
                         </span>
-                        <br/>
-                        <small style={{color: '#94a3b8'}}>
-                          {new Date(sale.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                        </small>
                       </td>
                       
-                      {/* COLUNA CANAL */}
                       <td>
                         {sale.sale_channel === 'Shopify' ? (
                           <span style={{display:'inline-flex', alignItems:'center', gap:'4px', background:'#f3e8ff', color:'#9333ea', padding:'4px 8px', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'bold'}}>
@@ -144,14 +187,25 @@ export default function SalesHistory() {
                         {sale.total_profit >= 0 ? '+' : ''}€ {sale.total_profit.toFixed(2)}
                       </td>
                       
+                      {/* --- AQUI ESTÃO OS BOTÕES UNIFORMIZADOS --- */}
                       <td>
-                        <button 
-                          className="delete-btn" 
-                          title="Anular Venda"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteSale(sale); }}
-                        >
-                          <Trash2 size={16}/>
-                        </button>
+                        <div className="table-actions">
+                          <button 
+                            className="action-btn btn-edit" 
+                            title="Editar Detalhes"
+                            onClick={(e) => handleEditClick(sale, e)}
+                          >
+                            <Edit size={18}/>
+                          </button>
+                          
+                          <button 
+                            className="action-btn btn-delete" 
+                            title="Anular Venda"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteSale(sale); }}
+                          >
+                            <Trash2 size={18}/>
+                          </button>
+                        </div>
                       </td>
                     </tr>
 
@@ -180,26 +234,16 @@ export default function SalesHistory() {
                                         {item.products?.name || 'Produto Removido'}
                                         {isOffer && (
                                           <span style={{
-                                            marginLeft: '8px', 
-                                            fontSize:'0.75rem', 
-                                            background:'#dcfce7', 
-                                            color:'#166534', 
-                                            padding:'2px 8px', 
-                                            borderRadius:'4px', 
-                                            fontWeight:'bold',
-                                            display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                            marginLeft: '8px', fontSize:'0.75rem', background:'#dcfce7', color:'#166534', 
+                                            padding:'2px 8px', borderRadius:'4px', fontWeight:'bold'
                                           }}>
-                                            <Gift size={12}/> OFERTA
+                                            OFERTA
                                           </span>
                                         )}
                                       </td>
                                       <td style={{padding: '8px', textAlign: 'center'}}>{item.quantity}</td>
                                       <td style={{padding: '8px', textAlign: 'right'}}>
-                                        {isOffer ? (
-                                          <span style={{color: '#166534', fontWeight:'bold'}}>Grátis</span>
-                                        ) : (
-                                          `€ ${item.unit_price.toFixed(2)}`
-                                        )}
+                                        {isOffer ? <span style={{color: '#166534', fontWeight:'bold'}}>Grátis</span> : `€ ${item.unit_price.toFixed(2)}`}
                                       </td>
                                       <td style={{padding: '8px', textAlign: 'right', fontWeight: '500'}}>
                                         € {(item.quantity * item.unit_price).toFixed(2)}
@@ -220,6 +264,62 @@ export default function SalesHistory() {
           </table>
         </div>
       </div>
+
+      {/* --- MODAL DE EDIÇÃO --- */}
+      {showEditModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth: '400px'}}>
+            <div className="modal-header">
+              <h3>Editar Venda</h3>
+              <button onClick={() => setShowEditModal(false)} className="close-modal"><X size={20}/></button>
+            </div>
+            
+            <form onSubmit={handleSaveEdit} className="modern-form">
+              <div className="input-group">
+                <label>Data da Venda</label>
+                <input 
+                  type="date" 
+                  value={editingSale.created_at} 
+                  onChange={e => setEditingSale({...editingSale, created_at: e.target.value})} 
+                  required
+                />
+              </div>
+
+              <div className="input-group" style={{marginTop:'15px'}}>
+                <label>Cliente</label>
+                <select 
+                  value={editingSale.client_id || ''} 
+                  onChange={e => setEditingSale({...editingSale, client_id: e.target.value})}
+                  className="modern-input"
+                  style={{width:'100%', padding:'10px', borderRadius:'8px', border:'1px solid #e2e8f0'}}
+                >
+                  <option value="">Cliente Final (Sem Registo)</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group" style={{marginTop:'15px'}}>
+                <label>Canal de Venda</label>
+                <select 
+                  value={editingSale.sale_channel} 
+                  onChange={e => setEditingSale({...editingSale, sale_channel: e.target.value})}
+                  className="modern-input"
+                  style={{width:'100%', padding:'10px', borderRadius:'8px', border:'1px solid #e2e8f0'}}
+                >
+                  <option value="Fisica">🏢 Loja Física</option>
+                  <option value="Shopify">🌐 Shopify</option>
+                </select>
+              </div>
+
+              <button type="submit" className="save-btn" style={{marginTop:'20px'}}>
+                <Save size={18}/> Atualizar Venda
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

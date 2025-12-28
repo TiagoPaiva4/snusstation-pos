@@ -54,6 +54,55 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* --- Botões de Ação na Tabela (CORRIGIDO) --- */
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0; /* Remove padding extra que possa estar a encolher o icon */
+}
+
+/* Garante que o ícone usa a cor do texto do botão */
+.action-btn svg {
+  stroke: currentColor; 
+  stroke-width: 2px;
+}
+
+/* Estilo do Botão Editar (Azul) */
+.btn-edit {
+  background-color: #eff6ff !important;
+  color: #2563eb !important; /* Força a cor azul */
+}
+
+.btn-edit:hover {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+}
+
+/* Estilo do Botão Apagar (Vermelho) */
+.btn-delete {
+  background-color: #fef2f2 !important;
+  color: #ef4444 !important; /* Força a cor vermelha */
+}
+
+.btn-delete:hover {
+  background-color: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
