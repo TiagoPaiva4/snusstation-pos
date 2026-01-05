@@ -47,18 +47,30 @@ export default function SalesHistory() {
     if (!window.confirm('Tem a certeza que deseja anular esta venda? O stock será reposto.')) return;
 
     try {
+      // 1. Repor Stock (código que já tinha)
       for (const item of sale.sale_items) {
         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
         if (prod) {
           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id);
         }
       }
+
+      // 2. Apagar itens da venda PRIMEIRO (Nova etapa necessária)
+      const { error: itemsError } = await supabase
+        .from('sale_items')
+        .delete()
+        .eq('sale_id', sale.id);
+      
+      if (itemsError) throw itemsError;
+
+      // 3. Apagar a venda DEPOIS
       const { error } = await supabase.from('sales').delete().eq('id', sale.id);
       if (error) throw error;
 
       alert('Venda anulada e stock reposto.');
       fetchData();
     } catch (error) {
+      console.error(error);
       alert('Erro ao anular venda: ' + error.message);
     }
   };
