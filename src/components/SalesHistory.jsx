@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, ChevronDown, ChevronRight, Package, Trash2, User, Globe, Store, Edit, X, Save } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Package, Trash2, User, Globe, Store, Edit, X, Save, Download } from 'lucide-react';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState([]);
@@ -8,6 +8,10 @@ export default function SalesHistory() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedRows, setExpandedRows] = useState({});
+
+  // --- Estados: Filtro de Data ---
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Estados para Edição
   const [showEditModal, setShowEditModal] = useState(false);
@@ -26,8 +30,8 @@ export default function SalesHistory() {
       .select('*, clients(id, name), sale_items(*, products(name))')
       .order('created_at', { ascending: false });
 
+    if (salesData) setSales(salesData);
     if (salesError) console.error('Erro ao buscar vendas:', salesError);
-    else setSales(salesData || []);
 
     // 2. Buscar Clientes
     const { data: clientsData } = await supabase
@@ -35,7 +39,7 @@ export default function SalesHistory() {
       .select('id, name')
       .order('name');
     
-    setClients(clientsData || []);
+    if (clientsData) setClients(clientsData);
     setLoading(false);
   };
 
@@ -47,7 +51,7 @@ export default function SalesHistory() {
     if (!window.confirm('Tem a certeza que deseja anular esta venda? O stock será reposto.')) return;
 
     try {
-      // 1. Repor Stock (código que já tinha)
+      // 1. Repor Stock
       for (const item of sale.sale_items) {
         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
         if (prod) {
@@ -55,15 +59,11 @@ export default function SalesHistory() {
         }
       }
 
-      // 2. Apagar itens da venda PRIMEIRO (Nova etapa necessária)
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .delete()
-        .eq('sale_id', sale.id);
-      
+      // 2. Apagar itens
+      const { error: itemsError } = await supabase.from('sale_items').delete().eq('sale_id', sale.id);
       if (itemsError) throw itemsError;
 
-      // 3. Apagar a venda DEPOIS
+      // 3. Apagar venda
       const { error } = await supabase.from('sales').delete().eq('id', sale.id);
       if (error) throw error;
 
@@ -99,14 +99,75 @@ export default function SalesHistory() {
         .eq('id', editingSale.id);
 
       if (error) throw error;
-
-      alert("Venda atualizada com sucesso!");
+      alert("Venda atualizada!");
       setShowEditModal(false);
       fetchData(); 
-
     } catch (error) {
-      alert("Erro ao atualizar: " + error.message);
+      alert("Erro: " + error.message);
     }
+  };
+
+  // --- FUNÇÃO DE EXPORTAÇÃO (CORRIGIDA PARA EXCEL PORTUGUÊS) ---
+  const handleExportCSV = () => {
+    const salesToExport = sales.filter(sale => {
+      if (!startDate && !endDate) return true;
+      const saleDate = new Date(sale.created_at);
+      const start = startDate ? new Date(startDate) : new Date('2000-01-01');
+      start.setHours(0,0,0,0);
+      const end = endDate ? new Date(endDate) : new Date();
+      end.setHours(23,59,59,999);
+      return saleDate >= start && saleDate <= end;
+    });
+
+    if (salesToExport.length === 0) {
+      alert("Não existem vendas no período selecionado.");
+      return;
+    }
+
+    const headers = [
+      "Data",
+      "Nome do Cliente",
+      "Produto",
+      "Quantidade",
+      "Preço Unitário",
+      "Total"
+    ];
+
+    // MUDANÇA AQUI: Usamos ';' em vez de ',' para unir os campos
+    const csvRows = [headers.join(';')];
+
+    for (const sale of salesToExport) {
+      const dateObj = new Date(sale.created_at);
+      const dateStr = dateObj.toLocaleDateString('pt-PT');
+      const clientName = sale.clients?.name || 'Cliente Final';
+
+      if (sale.sale_items && sale.sale_items.length > 0) {
+        for (const item of sale.sale_items) {
+          const productName = item.products?.name || 'Produto Removido';
+          const lineTotal = item.quantity * item.unit_price;
+
+          const row = [
+            dateStr,
+            `"${clientName}"`, 
+            `"${productName}"`,
+            item.quantity,
+            item.unit_price.toFixed(2).replace('.', ','), // Preço com vírgula (ex: 4,34)
+            lineTotal.toFixed(2).replace('.', ',')        // Total com vírgula
+          ];
+          // MUDANÇA AQUI: join(';') garante que a vírgula do preço não parte a coluna
+          csvRows.push(row.join(';'));
+        }
+      }
+    }
+
+    const csvString = "\uFEFF" + csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Detalhe_Vendas_${startDate || 'inicio'}_ate_${endDate || 'hoje'}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const filteredSales = sales.filter(sale => 
@@ -121,7 +182,8 @@ export default function SalesHistory() {
       </div>
 
       <div className="list-container">
-        <div className="list-header">
+        <div className="list-header" style={{display:'flex', gap:'15px', alignItems:'center', flexWrap:'wrap', justifyContent: 'space-between'}}>
+          
           <div style={{position: 'relative', width: '300px'}}>
             <Search size={18} style={{position:'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b'}}/>
             <input 
@@ -129,8 +191,50 @@ export default function SalesHistory() {
               placeholder="Procurar cliente ou vendedor..." 
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)} 
-              style={{margin:0, paddingLeft:35}} 
+              style={{margin:0, paddingLeft:35, width: '100%'}} 
             />
+          </div>
+
+          <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'5px', background:'white', padding:'6px 10px', borderRadius:'8px', border:'1px solid #e2e8f0'}}>
+              <input 
+                type="date" 
+                value={startDate} 
+                onChange={e => setStartDate(e.target.value)}
+                style={{border:'none', outline:'none', color:'#475569', fontFamily:'inherit'}}
+                title="Data Inicial"
+              />
+              <span style={{color:'#cbd5e1'}}>-</span>
+              <input 
+                type="date" 
+                value={endDate} 
+                onChange={e => setEndDate(e.target.value)}
+                style={{border:'none', outline:'none', color:'#475569', fontFamily:'inherit'}}
+                title="Data Final"
+              />
+            </div>
+
+            <button 
+              onClick={handleExportCSV}
+              className="action-btn"
+              style={{
+                background: '#10b981', 
+                color: 'white', 
+                width: 'auto', 
+                padding: '0 15px', 
+                height: '38px',
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                borderRadius: '8px',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <Download size={18} />
+              <span>CSV Detalhado</span>
+            </button>
           </div>
         </div>
 
@@ -199,7 +303,6 @@ export default function SalesHistory() {
                         {sale.total_profit >= 0 ? '+' : ''}€ {sale.total_profit.toFixed(2)}
                       </td>
                       
-                      {/* --- AQUI ESTÃO OS BOTÕES UNIFORMIZADOS --- */}
                       <td>
                         <div className="table-actions">
                           <button 
@@ -277,7 +380,6 @@ export default function SalesHistory() {
         </div>
       </div>
 
-      {/* --- MODAL DE EDIÇÃO --- */}
       {showEditModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{maxWidth: '400px'}}>
