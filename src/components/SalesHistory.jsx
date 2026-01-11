@@ -273,11 +273,10 @@ export default function SalesHistory() {
                 <th style={{width: '40px'}}></th>
                 <th>Data</th>
                 <th>Canal</th>
-                {/* REMOVIDO: <th>Vendedor</th> */}
                 <th>Cliente</th>
                 <th>Total</th>
                 <th>Lucro</th>
-                <th>Pago</th> {/* MOVIDO PARA AQUI */}
+                <th style={{textAlign: 'center', width: '60px'}}>Pago</th> {/* HEADER CENTRADO */}
                 <th>Ações</th>
               </tr>
             </thead>
@@ -315,8 +314,6 @@ export default function SalesHistory() {
                         )}
                       </td>
 
-                      {/* REMOVIDO: Coluna Vendedor */}
-
                       <td>{sale.clients?.name || <span style={{color:'#94a3b8'}}>Cliente Final</span>}</td>
                       
                       <td style={{fontWeight: 'bold'}}>€ {sale.total_amount.toFixed(2)}</td>
@@ -325,13 +322,13 @@ export default function SalesHistory() {
                         {sale.total_profit >= 0 ? '+' : ''}€ {sale.total_profit.toFixed(2)}
                       </td>
 
-                      {/* CHECKBOX DE PAGAMENTO MOVIDA PARA AQUI */}
-                      <td style={{textAlign: 'center'}} onClick={e => e.stopPropagation()}>
+                      {/* CHECKBOX CENTRADA */}
+                      <td style={{textAlign: 'center', verticalAlign: 'middle'}} onClick={e => e.stopPropagation()}>
                         <input 
                           type="checkbox" 
                           checked={sale.is_paid || false} 
                           onChange={() => handleTogglePaid(sale, sale.is_paid)}
-                          style={{width:'16px', height:'16px', cursor:'pointer'}}
+                          style={{width:'16px', height:'16px', cursor:'pointer', verticalAlign: 'middle'}}
                           title="Marcar como Pago/Não Pago"
                         />
                       </td>
@@ -362,7 +359,7 @@ export default function SalesHistory() {
                         <td colSpan="8" style={{padding: '0 20px 20px 20px'}}>
                           <div style={{background: 'white', borderRadius: '8px', padding: '15px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'}}>
                             
-                            {/* --- HEADER DOS DETALHES (COM VENDEDOR) --- */}
+                            {/* HEADER DOS DETALHES (COM VENDEDOR) */}
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
                               <h5 style={{margin: '0', display: 'flex', alignItems: 'center', gap: '8px', color:'#475569'}}>
                                 <Package size={16}/> Itens da Venda
