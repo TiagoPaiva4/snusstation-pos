@@ -9,9 +9,10 @@ import POS from './components/POS';
 import SalesHistory from './components/SalesHistory';
 import Analytics from './components/Analytics';
 import B2B from './components/B2B';
+import Expenses from './components/Expenses';
 import SetPassword from './components/SetPassword';
 import './App.css';
-import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase, Loader2 } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Users, Package, LogOut, Menu, X, History, BarChart2, Briefcase, Loader2, Wallet } from 'lucide-react';
 import logoImg from './assets/logo-navbar.png';
 
 const NavItem = ({ to, icon: Icon, label, onClick }) => {
@@ -125,6 +126,7 @@ function App() {
               <NavItem to="/sales" icon={History} label="Histórico" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/clients" icon={Users} label="Clientes" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/analysis" icon={BarChart2} label="Análise" onClick={() => setMobileMenuOpen(false)} />
+              <NavItem to="/expenses" icon={Wallet} label="Despesas" onClick={() => setMobileMenuOpen(false)} />
               <NavItem to="/b2b" icon={Briefcase} label="B2B" onClick={() => setMobileMenuOpen(false)} />
             </nav>
             <button onClick={handleLogout} className="logout-btn">
@@ -142,6 +144,7 @@ function App() {
             <Route path="/b2b" element={<B2B />} />
             <Route path="/products" element={<Products />} />
             <Route path="/clients" element={<Clients />} />
+            <Route path="/expenses" element={<Expenses />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
