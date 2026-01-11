@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, ChevronDown, ChevronRight, Package, Trash2, User, Globe, Store, Edit, X, Save, Download } from 'lucide-react';
+// ADICIONADO: ChevronLeft na importação
+import { Search, ChevronDown, ChevronRight, ChevronLeft, Package, Trash2, User, Globe, Store, Edit, X, Save, Download } from 'lucide-react';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState([]);
@@ -13,27 +14,45 @@ export default function SalesHistory() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // --- PAGINAÇÃO ---
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const ITEMS_PER_PAGE = 20;
+
   // Estados para Edição
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, startDate, endDate, searchTerm]); // Recarregar quando estes mudam
 
   const fetchData = async () => {
     setLoading(true);
     
-    // 1. Buscar Vendas
-    const { data: salesData, error: salesError } = await supabase
+    // 1. Calcular Paginação
+    const from = (page - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+
+    // 2. Construir Query
+    let query = supabase
       .from('sales')
-      .select('*, clients(id, name), sale_items(*, products(name))')
+      .select('*, clients(id, name), sale_items(*, products(name))', { count: 'exact' })
       .order('created_at', { ascending: false });
 
+    // Aplicar Filtros de Data
+    if (startDate) query = query.gte('created_at', `${startDate}T00:00:00`);
+    if (endDate) query = query.lte('created_at', `${endDate}T23:59:59`);
+
+    // Executar com range (paginação)
+    const { data: salesData, count, error: salesError } = await query.range(from, to);
+
     if (salesData) setSales(salesData);
+    if (count) setTotalPages(Math.ceil(count / ITEMS_PER_PAGE));
+    
     if (salesError) console.error('Erro ao buscar vendas:', salesError);
 
-    // 2. Buscar Clientes
+    // 3. Buscar Clientes
     const { data: clientsData } = await supabase
       .from('clients')
       .select('id, name')
@@ -47,24 +66,14 @@ export default function SalesHistory() {
     setExpandedRows(prev => ({ ...prev, [saleId]: !prev[saleId] }));
   };
 
-  // --- ALTERAR ESTADO DE PAGAMENTO ---
+  // --- AÇÕES ---
   const handleTogglePaid = async (sale, currentStatus) => {
     try {
       const newStatus = !currentStatus;
-      
-      const { error } = await supabase
-        .from('sales')
-        .update({ is_paid: newStatus })
-        .eq('id', sale.id);
-
+      const { error } = await supabase.from('sales').update({ is_paid: newStatus }).eq('id', sale.id);
       if (error) throw error;
-
-      setSales(prevSales => 
-        prevSales.map(s => s.id === sale.id ? { ...s, is_paid: newStatus } : s)
-      );
-
+      setSales(prevSales => prevSales.map(s => s.id === sale.id ? { ...s, is_paid: newStatus } : s));
     } catch (error) {
-      console.error('Erro ao atualizar pagamento:', error);
       alert('Erro ao atualizar estado de pagamento.');
     }
   };
@@ -73,7 +82,6 @@ export default function SalesHistory() {
     if (!window.confirm('Tem a certeza que deseja anular esta venda? O stock será reposto.')) return;
 
     try {
-      // 1. Repor Stock
       for (const item of sale.sale_items) {
         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
         if (prod) {
@@ -81,11 +89,7 @@ export default function SalesHistory() {
         }
       }
 
-      // 2. Apagar itens
-      const { error: itemsError } = await supabase.from('sale_items').delete().eq('sale_id', sale.id);
-      if (itemsError) throw itemsError;
-
-      // 3. Apagar venda
+      await supabase.from('sale_items').delete().eq('sale_id', sale.id);
       const { error } = await supabase.from('sales').delete().eq('id', sale.id);
       if (error) throw error;
 
@@ -131,19 +135,19 @@ export default function SalesHistory() {
     }
   };
 
-  // --- EXPORTAR CSV ---
-  const handleExportCSV = () => {
-    const salesToExport = sales.filter(sale => {
-      if (!startDate && !endDate) return true;
-      const saleDate = new Date(sale.created_at);
-      const start = startDate ? new Date(startDate) : new Date('2000-01-01');
-      start.setHours(0,0,0,0);
-      const end = endDate ? new Date(endDate) : new Date();
-      end.setHours(23,59,59,999);
-      return saleDate >= start && saleDate <= end;
-    });
+  // --- EXPORTAR CSV (Busca TUDO no intervalo, ignora paginação) ---
+  const handleExportCSV = async () => {
+    let query = supabase
+      .from('sales')
+      .select('*, clients(id, name), sale_items(*, products(name))')
+      .order('created_at', { ascending: false });
 
-    if (salesToExport.length === 0) {
+    if (startDate) query = query.gte('created_at', `${startDate}T00:00:00`);
+    if (endDate) query = query.lte('created_at', `${endDate}T23:59:59`);
+
+    const { data: salesToExport, error } = await query;
+
+    if (error || !salesToExport || salesToExport.length === 0) {
       alert("Não existem vendas no período selecionado.");
       return;
     }
@@ -216,7 +220,7 @@ export default function SalesHistory() {
             <Search size={18} style={{position:'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b'}}/>
             <input 
               className="search-bar" 
-              placeholder="Procurar cliente ou vendedor..." 
+              placeholder="Filtrar nesta página..." 
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)} 
               style={{margin:0, paddingLeft:35, width: '100%'}} 
@@ -228,17 +232,15 @@ export default function SalesHistory() {
               <input 
                 type="date" 
                 value={startDate} 
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => {setStartDate(e.target.value); setPage(1);}}
                 style={{border:'none', outline:'none', color:'#475569', fontFamily:'inherit'}}
-                title="Data Inicial"
               />
               <span style={{color:'#cbd5e1'}}>-</span>
               <input 
                 type="date" 
                 value={endDate} 
-                onChange={e => setEndDate(e.target.value)}
+                onChange={e => {setEndDate(e.target.value); setPage(1);}}
                 style={{border:'none', outline:'none', color:'#475569', fontFamily:'inherit'}}
-                title="Data Final"
               />
             </div>
 
@@ -276,7 +278,7 @@ export default function SalesHistory() {
                 <th>Cliente</th>
                 <th>Total</th>
                 <th>Lucro</th>
-                <th style={{textAlign: 'center', width: '60px'}}>Pago</th> {/* HEADER CENTRADO */}
+                <th style={{textAlign: 'center', width: '60px'}}>Pago</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -284,7 +286,7 @@ export default function SalesHistory() {
               {loading ? (
                 <tr><td colSpan="8" style={{textAlign: 'center', padding: '30px'}}>A carregar histórico...</td></tr>
               ) : filteredSales.length === 0 ? (
-                <tr><td colSpan="8" style={{textAlign: 'center', padding: '30px'}}>Nenhuma venda encontrada.</td></tr>
+                <tr><td colSpan="8" style={{textAlign: 'center', padding: '30px'}}>Nenhuma venda encontrada nesta página.</td></tr>
               ) : (
                 filteredSales.map(sale => (
                   <React.Fragment key={sale.id}>
@@ -298,7 +300,8 @@ export default function SalesHistory() {
                       
                       <td>
                         <span style={{fontWeight: 500}}>
-                          {new Date(sale.created_at).toLocaleDateString()}
+                            {/* CORRIGIDO: Removida a hora */}
+                            {new Date(sale.created_at).toLocaleDateString()}
                         </span>
                       </td>
                       
@@ -322,7 +325,6 @@ export default function SalesHistory() {
                         {sale.total_profit >= 0 ? '+' : ''}€ {sale.total_profit.toFixed(2)}
                       </td>
 
-                      {/* CHECKBOX CENTRADA */}
                       <td style={{textAlign: 'center', verticalAlign: 'middle'}} onClick={e => e.stopPropagation()}>
                         <input 
                           type="checkbox" 
@@ -358,8 +360,6 @@ export default function SalesHistory() {
                       <tr style={{background: '#f8fafc'}}>
                         <td colSpan="8" style={{padding: '0 20px 20px 20px'}}>
                           <div style={{background: 'white', borderRadius: '8px', padding: '15px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'}}>
-                            
-                            {/* HEADER DOS DETALHES (COM VENDEDOR) */}
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
                               <h5 style={{margin: '0', display: 'flex', alignItems: 'center', gap: '8px', color:'#475569'}}>
                                 <Package size={16}/> Itens da Venda
@@ -417,6 +417,45 @@ export default function SalesHistory() {
             </tbody>
           </table>
         </div>
+
+        {/* --- CONTROLOS DE PAGINAÇÃO --- */}
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 0', borderTop: '1px solid #e2e8f0', marginTop: '10px'}}>
+            <span style={{fontSize: '0.9rem', color: '#64748b'}}>
+                Página <strong>{page}</strong> de <strong>{totalPages}</strong>
+            </span>
+            
+            <div style={{display: 'flex', gap: '5px'}}>
+                <button 
+                    onClick={() => setPage(p => Math.max(1, p - 1))} 
+                    disabled={page === 1}
+                    className="action-btn"
+                    style={{
+                        width: '35px', height: '35px', padding: 0, justifyContent: 'center', 
+                        border: '1px solid #cbd5e1', 
+                        background: page === 1 ? '#f1f5f9' : 'white', 
+                        cursor: page === 1 ? 'not-allowed' : 'pointer',
+                        color: '#334155' // COR ADICIONADA PARA VISIBILIDADE
+                    }}
+                >
+                    <ChevronLeft size={18} />
+                </button>
+                <button 
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
+                    disabled={page === totalPages}
+                    className="action-btn"
+                    style={{
+                        width: '35px', height: '35px', padding: 0, justifyContent: 'center', 
+                        border: '1px solid #cbd5e1', 
+                        background: page === totalPages ? '#f1f5f9' : 'white', 
+                        cursor: page === totalPages ? 'not-allowed' : 'pointer',
+                        color: '#334155' // COR ADICIONADA PARA VISIBILIDADE
+                    }}
+                >
+                    <ChevronRight size={18} />
+                </button>
+            </div>
+        </div>
+
       </div>
 
       {showEditModal && (
