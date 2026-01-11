@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store, ChevronDown } from 'lucide-react';
 import '../styles/POS.css';
 
 export default function POS() {
@@ -8,12 +8,19 @@ export default function POS() {
   const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
   const [cart, setCart] = useState([]);
+  
+  // Pesquisa de Produtos
   const [searchTerm, setSearchTerm] = useState('');
   const [showResults, setShowResults] = useState(false);
+  
+  // Cliente e Pesquisa de Cliente
   const [selectedClient, setSelectedClient] = useState('');
+  const [clientSearchTerm, setClientSearchTerm] = useState(''); // <--- NOVO: Texto da pesquisa de cliente
+  const [showClientDropdown, setShowClientDropdown] = useState(false); // <--- NOVO: Controlar dropdown de clientes
+
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   
-  // NOVO ESTADO: Canal de Venda (Fisica ou Shopify)
+  // Canal de Venda (Fisica ou Shopify)
   const [saleChannel, setSaleChannel] = useState('Fisica');
    
   // Estado para o Modal de Novo Cliente
@@ -21,13 +28,24 @@ export default function POS() {
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', location: '' });
 
   const searchRef = useRef(null);
+  const clientRef = useRef(null); // <--- NOVO: Ref para fechar dropdown de clientes
 
   // --- EFEITOS ---
   useEffect(() => {
     fetchData();
+
+    // Função para fechar dropdowns ao clicar fora
     const handleClickOutside = (e) => {
-      if (searchRef.current && !searchRef.current.contains(e.target)) setShowResults(false);
+      // Fechar pesquisa de produtos
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setShowResults(false);
+      }
+      // Fechar pesquisa de clientes
+      if (clientRef.current && !clientRef.current.contains(e.target)) {
+        setShowClientDropdown(false);
+      }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -97,6 +115,11 @@ export default function POS() {
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Filtro de Clientes (para o dropdown)
+  const filteredClients = clients.filter(c => 
+    c.name.toLowerCase().includes(clientSearchTerm.toLowerCase())
+  );
+
   // --- AÇÕES DE BASE DE DADOS ---
   const handleCreateClient = async (e) => {
     e.preventDefault();
@@ -109,7 +132,11 @@ export default function POS() {
     } else {
       const createdClient = data[0];
       setClients([...clients, createdClient].sort((a, b) => a.name.localeCompare(b.name)));
+      
+      // Selecionar automaticamente o novo cliente
       setSelectedClient(createdClient.id);
+      setClientSearchTerm(createdClient.name); // Preencher o input
+      
       setShowModal(false);
       setNewClient({ name: '', email: '', phone: '', location: '' });
     }
@@ -127,7 +154,7 @@ export default function POS() {
     const total = getTotal();
     const profit = getTotalProfit();
 
-    // 1. Inserir a Venda (Incluindo o sale_channel)
+    // 1. Inserir a Venda
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{ 
@@ -137,7 +164,7 @@ export default function POS() {
         created_at: saleDate,
         user_id: user?.id,
         seller_name: sellerName,
-        sale_channel: saleChannel // <--- NOVO CAMPO
+        sale_channel: saleChannel
       }])
       .select();
 
@@ -164,30 +191,93 @@ export default function POS() {
 
     alert(`Venda (${saleChannel}) registada com sucesso!`);
     setCart([]);
-    setSaleChannel('Fisica'); // Reset para Fisica por defeito
+    setSaleChannel('Fisica');
+    setSelectedClient('');
+    setClientSearchTerm('');
     window.location.reload(); 
+  };
+
+  // Selecionar cliente da lista
+  const selectClientFromDropdown = (client) => {
+    setSelectedClient(client.id);
+    setClientSearchTerm(client.name);
+    setShowClientDropdown(false);
   };
 
   return (
     <div className="pos-wrapper">
        
-      {/* SELETOR DE CLIENTE */}
+      {/* ÁREA DE CLIENTE (AGORA COM PESQUISA) */}
       <div className="pos-area-client">
         <div className="sidebar-card client-card">
           <label>Cliente da Venda</label>
-          <div className="client-input-group">
-            <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}>
-              <option value="">Selecione o Cliente...</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <button className="add-client-btn" onClick={() => setShowModal(true)}>
+          <div className="client-input-group" ref={clientRef} style={{position: 'relative', display: 'flex', gap: '8px'}}>
+            
+            <div style={{position: 'relative', width: '100%'}}>
+              <input 
+                type="text"
+                placeholder="Procurar ou selecionar cliente..."
+                value={clientSearchTerm}
+                onChange={(e) => {
+                  setClientSearchTerm(e.target.value);
+                  setShowClientDropdown(true);
+                  if(e.target.value === '') setSelectedClient(''); // Limpar seleção se apagar texto
+                }}
+                onFocus={() => setShowClientDropdown(true)}
+                style={{
+                  width: '100%', 
+                  padding: '10px', 
+                  borderRadius: '8px', 
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.9rem'
+                }}
+              />
+              
+              {/* Dropdown de Resultados de Clientes */}
+              {showClientDropdown && (
+                <div style={{
+                  position: 'absolute', top: '105%', left: 0, right: 0,
+                  background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px',
+                  maxHeight: '250px', overflowY: 'auto', zIndex: 100,
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                }}>
+                  {filteredClients.length > 0 ? (
+                    filteredClients.map(c => (
+                      <div 
+                        key={c.id}
+                        onClick={() => selectClientFromDropdown(c)}
+                        style={{
+                          padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                      >
+                        <span style={{fontWeight: 500, color: '#334155'}}>{c.name}</span>
+                        {selectedClient === c.id && <span style={{fontSize:'0.8rem', color:'#10b981'}}>Selecionado</span>}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{padding: '12px', color: '#94a3b8', textAlign: 'center', fontSize: '0.9rem'}}>
+                      Nenhum cliente encontrado.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button 
+              className="add-client-btn" 
+              onClick={() => setShowModal(true)}
+              title="Criar Novo Cliente"
+            >
               <UserPlus size={18}/>
             </button>
           </div>
         </div>
       </div>
 
-      {/* ÁREA DE PESQUISA */}
+      {/* ÁREA DE PESQUISA DE PRODUTOS */}
       <div className="pos-area-main">
         <div className="search-container" ref={searchRef}>
           <div className="search-input-wrapper">
@@ -232,7 +322,7 @@ export default function POS() {
               <span className="item-count">{cart.length} itens</span>
             </div>
 
-            {/* --- SELETOR DE CANAL (FISICA vs SHOPIFY) --- */}
+            {/* SELETOR DE CANAL */}
             <div style={{background:'#f1f5f9', padding:'3px', borderRadius:'8px', display:'flex', gap:'5px'}}>
               <button 
                 onClick={() => setSaleChannel('Fisica')}
@@ -251,7 +341,7 @@ export default function POS() {
                 onClick={() => setSaleChannel('Shopify')}
                 style={{
                   border:'none', 
-                  background: saleChannel === 'Shopify' ? '#9333ea' : 'transparent', // Roxo para Shopify
+                  background: saleChannel === 'Shopify' ? '#9333ea' : 'transparent',
                   color: saleChannel === 'Shopify' ? 'white' : '#64748b',
                   padding: '5px 10px', borderRadius:'6px', cursor:'pointer', fontWeight:600,
                   boxShadow: saleChannel === 'Shopify' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
@@ -261,8 +351,6 @@ export default function POS() {
                 <Globe size={14}/> Shopify
               </button>
             </div>
-            {/* ------------------------------------------- */}
-
           </div>
            
           <div className="cart-list">
