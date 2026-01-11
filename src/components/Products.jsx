@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Upload, X, Image as ImageIcon, Package, DollarSign, Tag, Pencil, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Package, DollarSign, Tag, Pencil, ChevronLeft, ChevronRight, Plus, FileText, Save, Trash2 } from 'lucide-react';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -18,6 +18,14 @@ export default function Products() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const ITEMS_PER_PAGE = 10;
+
+  // --- NOVOS ESTADOS: FATURA (ENTRADA DE STOCK) ---
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceData, setInvoiceData] = useState({
+    reference: '',
+    supplier: '',
+    items: [] // { product_id, quantity, cost_price }
+  });
 
   useEffect(() => { 
     fetchProducts(); 
@@ -153,16 +161,95 @@ export default function Products() {
   const nextPage = () => { if (page < totalPages) setPage(page + 1); };
   const prevPage = () => { if (page > 1) setPage(page - 1); };
 
+
+  // --- FUNÇÕES DA FATURA (NOVO) ---
+  const addInvoiceRow = () => {
+    setInvoiceData(prev => ({
+      ...prev,
+      items: [...prev.items, { product_id: '', quantity: 1, cost_price: 0 }]
+    }));
+  };
+
+  const removeInvoiceRow = (index) => {
+    const newItems = invoiceData.items.filter((_, i) => i !== index);
+    setInvoiceData({ ...invoiceData, items: newItems });
+  };
+
+  const updateInvoiceItem = (index, field, value) => {
+    const newItems = [...invoiceData.items];
+    newItems[index][field] = value;
+    setInvoiceData({ ...invoiceData, items: newItems });
+  };
+
+  const handleSaveInvoice = async (e) => {
+    e.preventDefault();
+    if (invoiceData.items.length === 0) return alert("Adicione produtos à fatura.");
+    if (invoiceData.items.some(item => !item.product_id)) return alert("Selecione os produtos.");
+
+    try {
+      setUploading(true);
+      // 1. Criar Cabeçalho da Fatura
+      const { data: entry, error: entryError } = await supabase
+        .from('stock_entries')
+        .insert([{ reference: invoiceData.reference, supplier: invoiceData.supplier }])
+        .select()
+        .single();
+
+      if (entryError) throw entryError;
+
+      // 2. Inserir Itens e Atualizar Stock
+      for (const item of invoiceData.items) {
+        await supabase.from('stock_entry_items').insert([{
+          entry_id: entry.id,
+          product_id: item.product_id,
+          quantity: parseInt(item.quantity),
+          cost_price: parseFloat(item.cost_price || 0)
+        }]);
+
+        // Atualizar stock do produto individualmente
+        const currentProd = products.find(p => p.id == item.product_id);
+        if (currentProd) {
+            await supabase.from('products')
+            .update({ stock: (parseInt(currentProd.stock) || 0) + parseInt(item.quantity) })
+            .eq('id', item.product_id);
+        }
+      }
+
+      alert("Fatura registada e stock atualizado!");
+      setShowInvoiceModal(false);
+      setInvoiceData({ reference: '', supplier: '', items: [] });
+      fetchProducts();
+    } catch (error) {
+      alert("Erro ao gravar fatura: " + error.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+
   return (
     <div className="page">
       <div className="dashboard-header" style={{flexDirection: 'row', justifyContent:'space-between', alignItems:'center'}}>
         <h2>Gestão de Produtos</h2>
         
-        {!showForm && (
-          <button onClick={handleNewProduct} className="submit-btn-modern" style={{width: 'auto', display:'flex', gap:'5px', alignItems:'center'}}>
-            <Plus size={18} /> Novo Produto
-          </button>
-        )}
+        <div style={{display:'flex', gap:'10px'}}>
+            {/* --- NOVO BOTÃO DE FATURA --- */}
+            {!showForm && !showInvoiceModal && (
+                <button 
+                onClick={() => { setShowInvoiceModal(true); addInvoiceRow(); }} 
+                className="submit-btn-modern" 
+                style={{width: 'auto', display:'flex', gap:'5px', alignItems:'center', background: '#4f46e5', color: 'white'}}
+                >
+                <FileText size={18} /> Adicionar Fatura
+                </button>
+            )}
+
+            {!showForm && (
+            <button onClick={handleNewProduct} className="submit-btn-modern" style={{width: 'auto', display:'flex', gap:'5px', alignItems:'center'}}>
+                <Plus size={18} /> Novo Produto
+            </button>
+            )}
+        </div>
       </div>
       
       <div className="management-grid" style={{ gridTemplateColumns: showForm ? '350px 1fr' : '1fr' }}>
@@ -315,6 +402,103 @@ export default function Products() {
           </div>
         </div>
       </div>
+
+      {/* --- MODAL DA FATURA (ADICIONADO) --- */}
+      {showInvoiceModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth: '800px'}}>
+            <div className="modal-header">
+              <h3>📥 Adicionar Fatura (Stock)</h3>
+              <button onClick={() => setShowInvoiceModal(false)} className="close-modal"><X size={20}/></button>
+            </div>
+
+            <form onSubmit={handleSaveInvoice} className="modern-form">
+              <div className="form-row" style={{background: '#f8fafc', padding: '15px', borderRadius: '8px', marginBottom: '20px', display:'flex', gap:'15px'}}>
+                <div className="input-group" style={{flex:1}}>
+                  <label>Ref. Fatura</label>
+                  <input 
+                    className="modern-input" 
+                    placeholder="Ex: FT 001"
+                    value={invoiceData.reference}
+                    onChange={e => setInvoiceData({...invoiceData, reference: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="input-group" style={{flex:1}}>
+                  <label>Fornecedor</label>
+                  <input 
+                    className="modern-input" 
+                    placeholder="Nome do Fornecedor"
+                    value={invoiceData.supplier}
+                    onChange={e => setInvoiceData({...invoiceData, supplier: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <h4 style={{marginBottom: '10px', color: '#475569'}}>Itens</h4>
+              <div style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '15px'}}>
+                <table style={{width: '100%', fontSize: '0.9rem'}}>
+                  <thead>
+                    <tr style={{background: '#f1f5f9', textAlign: 'left'}}>
+                      <th style={{padding: '8px'}}>Produto</th>
+                      <th style={{padding: '8px', width: '80px'}}>Qtd</th>
+                      <th style={{padding: '8px', width: '100px'}}>Custo (€)</th>
+                      <th style={{width: '40px'}}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceData.items.map((item, index) => (
+                      <tr key={index} style={{borderBottom: '1px solid #e2e8f0'}}>
+                        <td style={{padding: '5px'}}>
+                          <select 
+                            className="modern-input" 
+                            style={{margin: 0, padding: '8px'}}
+                            value={item.product_id}
+                            onChange={e => updateInvoiceItem(index, 'product_id', e.target.value)}
+                            required
+                          >
+                            <option value="">Selecione...</option>
+                            {products.map(p => (
+                                <option key={p.id} value={p.id}>{p.name} ({p.brand})</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{padding: '5px'}}>
+                          <input 
+                            type="number" min="1" className="modern-input" style={{margin: 0, padding: '8px'}}
+                            value={item.quantity} onChange={e => updateInvoiceItem(index, 'quantity', e.target.value)} required
+                          />
+                        </td>
+                        <td style={{padding: '5px'}}>
+                          <input 
+                            type="number" step="0.01" className="modern-input" style={{margin: 0, padding: '8px'}}
+                            value={item.cost_price} onChange={e => updateInvoiceItem(index, 'cost_price', e.target.value)}
+                          />
+                        </td>
+                        <td style={{textAlign: 'center'}}>
+                            <button type="button" onClick={() => removeInvoiceRow(index)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444'}}>
+                                <Trash2 size={18} />
+                            </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button type="button" onClick={addInvoiceRow} style={{background: '#f1f5f9', color: '#334155', border: '1px dashed #cbd5e1', padding: '8px', width: '100%', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'}}>
+                <Plus size={16} /> Adicionar Linha
+              </button>
+
+              <div style={{marginTop: '25px', borderTop: '1px solid #e2e8f0', paddingTop: '15px'}}>
+                <button type="submit" className="save-btn" style={{width: '100%', justifyContent: 'center', padding: '12px', fontSize: '1rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display:'flex', gap:'8px', alignItems:'center'}}>
+                    <Save size={20}/> Confirmar Fatura
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
