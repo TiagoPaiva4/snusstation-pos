@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Calendar, DollarSign, TrendingUp, Package, Filter, ArrowRight } from 'lucide-react';
+import { Calendar, DollarSign, TrendingUp, Package, Filter, Store, Globe } from 'lucide-react';
 
 export default function Analytics() {
   const [timeRange, setTimeRange] = useState('month'); // default: este mês
   const [loading, setLoading] = useState(false);
   
-  // Estatísticas Gerais
+  // Estatísticas Gerais (KPIs)
   const [stats, setStats] = useState({
     revenue: 0,
     profit: 0,
@@ -17,9 +17,16 @@ export default function Analytics() {
   // Lista de Top Produtos
   const [topProducts, setTopProducts] = useState([]);
 
+  // Estatísticas Mensais (Físico vs Online)
+  const [monthlyStats, setMonthlyStats] = useState([]);
+
   useEffect(() => {
     fetchAnalytics();
   }, [timeRange]);
+
+  useEffect(() => {
+    fetchMonthlyStats();
+  }, []);
 
   const getStartDate = () => {
     const now = new Date();
@@ -51,7 +58,7 @@ export default function Analytics() {
     const startDate = getStartDate();
 
     try {
-      // 1. Buscar Vendas no intervalo
+      // 1. Buscar Vendas no intervalo selecionado
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select('*')
@@ -63,7 +70,7 @@ export default function Analytics() {
       const revenue = salesData.reduce((acc, curr) => acc + curr.total_amount, 0);
       const profit = salesData.reduce((acc, curr) => acc + curr.total_profit, 0);
       
-      // Calcular Melhor Dia (Simples)
+      // Calcular Melhor Dia
       const salesByDate = {};
       salesData.forEach(sale => {
         const date = new Date(sale.created_at).toLocaleDateString();
@@ -73,7 +80,7 @@ export default function Analytics() {
 
       setStats({ revenue, profit, salesCount: salesData.length, bestDay });
 
-      // 2. Buscar Top Produtos (Requer os IDs das vendas filtradas)
+      // 2. Buscar Top Produtos
       if (salesData.length > 0) {
         const saleIds = salesData.map(s => s.id);
         
@@ -84,7 +91,6 @@ export default function Analytics() {
 
         if (itemsError) throw itemsError;
 
-        // Agrupar por nome do produto
         const productMap = {};
         itemsData.forEach(item => {
           const name = item.products?.name || 'Desconhecido';
@@ -99,10 +105,9 @@ export default function Analytics() {
           productMap[key].profit += (item.unit_profit * item.quantity);
         });
 
-        // Converter para array e ordenar
         const sortedProducts = Object.values(productMap)
-          .sort((a, b) => b.qty - a.qty) // Ordenar por quantidade vendida
-          .slice(0, 10); // Pegar top 10
+          .sort((a, b) => b.qty - a.qty)
+          .slice(0, 10);
 
         setTopProducts(sortedProducts);
       } else {
@@ -116,12 +121,64 @@ export default function Analytics() {
     }
   };
 
+  // --- BUSCAR DADOS MENSAIS (Apenas Últimos 12 Meses) ---
+  const fetchMonthlyStats = async () => {
+    try {
+      const { data: allSales, error } = await supabase
+        .from('sales')
+        .select('created_at, total_amount, sale_channel')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const grouped = {};
+
+      allSales.forEach(sale => {
+        const date = new Date(sale.created_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = date.toLocaleString('pt-PT', { month: 'long', year: 'numeric' });
+        
+        if (!grouped[monthKey]) {
+          grouped[monthKey] = {
+            key: monthKey, // Usado para ordenar
+            name: monthName.charAt(0).toUpperCase() + monthName.slice(1),
+            physical: 0,
+            online: 0,
+            total: 0
+          };
+        }
+
+        const amount = sale.total_amount;
+        grouped[monthKey].total += amount;
+
+        if (sale.sale_channel === 'Shopify') {
+          grouped[monthKey].online += amount;
+        } else {
+          grouped[monthKey].physical += amount;
+        }
+      });
+
+      // 1. Converter para array
+      let result = Object.values(grouped);
+      
+      // 2. Ordenar por Data (Decrescente: mais recente primeiro)
+      result.sort((a, b) => b.key.localeCompare(a.key));
+
+      // 3. Pegar apenas os últimos 12 meses
+      result = result.slice(0, 12);
+
+      setMonthlyStats(result);
+
+    } catch (err) {
+      console.error("Erro ao buscar stats mensais:", err);
+    }
+  };
+
   return (
     <div className="page">
       <div className="dashboard-header" style={{marginBottom: '20px'}}>
         <h2>Análise de Performance</h2>
         
-        {/* Filtro de Tempo */}
         <div className="time-filter-container">
           <Filter size={16} style={{marginRight: 8, color: '#64748b'}}/>
           <select 
@@ -137,7 +194,6 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Grid de KPIs */}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-header">
@@ -175,48 +231,88 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Tabela de Top Produtos */}
-      <div className="list-container" style={{marginTop: '30px'}}>
-        <div className="list-header">
-          <h3>🏆 Top Produtos (Por Quantidade)</h3>
+      <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', marginTop: '30px'}}>
+        
+        {/* Tabela Top Produtos */}
+        <div className="list-container" style={{flex: 1, minWidth: '400px'}}>
+          <div className="list-header">
+            <h3>🏆 Top Produtos (Qtd)</h3>
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Produto</th>
+                  <th style={{textAlign:'center'}}>Qtd</th>
+                  <th style={{textAlign:'right'}}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>A analisar...</td></tr>
+                ) : topProducts.length === 0 ? (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>Sem dados.</td></tr>
+                ) : (
+                  topProducts.map((prod, index) => (
+                    <tr key={index}>
+                      <td><span className={`badge ${index === 0 ? 'badge-success' : 'badge-neutral'}`}>{index + 1}</span></td>
+                      <td>
+                        <span style={{fontWeight:500}}>{prod.name}</span>
+                        <div style={{fontSize:'0.75rem', color:'#64748b'}}>{prod.brand}</div>
+                      </td>
+                      <td style={{fontWeight: 'bold', textAlign:'center'}}>{prod.qty}</td>
+                      <td style={{textAlign:'right'}}>€ {prod.revenue.toFixed(0)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Ranking</th>
-                <th>Produto</th>
-                <th>Qtd Vendida</th>
-                <th>Faturação Gerada</th>
-                <th>Lucro Gerado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="5" style={{textAlign: 'center', padding: '30px'}}>A analisar dados...</td></tr>
-              ) : topProducts.length === 0 ? (
-                <tr><td colSpan="5" style={{textAlign: 'center', padding: '30px'}}>Sem dados para este período.</td></tr>
-              ) : (
-                topProducts.map((prod, index) => (
-                  <tr key={index}>
-                    <td>
-                      <span className={`badge ${index === 0 ? 'badge-success' : 'badge-neutral'}`}>
-                        #{index + 1}
-                      </span>
-                    </td>
-                    <td>
-                      <strong>{prod.name}</strong>
-                      <br/><small style={{color: '#64748b'}}>{prod.brand}</small>
-                    </td>
-                    <td style={{fontWeight: 'bold', fontSize: '1.1rem'}}>{prod.qty}</td>
-                    <td>€ {prod.revenue.toFixed(2)}</td>
-                    <td style={{color: '#10b981'}}>€ {prod.profit.toFixed(2)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+
+        {/* Tabela Faturação Mensal */}
+        <div className="list-container" style={{flex: 1, minWidth: '400px'}}>
+          <div className="list-header">
+            <h3>📅 Faturação Mensal (Últimos 12 Meses)</h3>
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mês</th>
+                  <th style={{textAlign:'right'}}>🏢 Física</th>
+                  <th style={{textAlign:'right'}}>🌐 Online</th>
+                  <th style={{textAlign:'right'}}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyStats.length === 0 ? (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>Sem histórico recente.</td></tr>
+                ) : (
+                  monthlyStats.map((stat) => (
+                    <tr key={stat.key}>
+                      <td style={{fontWeight: 500, color: '#334155'}}>{stat.name}</td>
+                      
+                      <td style={{textAlign:'right', color: '#64748b'}}>
+                        € {stat.physical.toFixed(2)}
+                      </td>
+                      
+                      <td style={{textAlign:'right', color: '#9333ea', fontWeight: 500}}>
+                        € {stat.online.toFixed(2)}
+                      </td>
+                      
+                      <td style={{textAlign:'right', fontWeight: 'bold'}}>
+                        € {stat.total.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
+
       </div>
     </div>
   );
