@@ -47,6 +47,28 @@ export default function SalesHistory() {
     setExpandedRows(prev => ({ ...prev, [saleId]: !prev[saleId] }));
   };
 
+  // --- ALTERAR ESTADO DE PAGAMENTO ---
+  const handleTogglePaid = async (sale, currentStatus) => {
+    try {
+      const newStatus = !currentStatus;
+      
+      const { error } = await supabase
+        .from('sales')
+        .update({ is_paid: newStatus })
+        .eq('id', sale.id);
+
+      if (error) throw error;
+
+      setSales(prevSales => 
+        prevSales.map(s => s.id === sale.id ? { ...s, is_paid: newStatus } : s)
+      );
+
+    } catch (error) {
+      console.error('Erro ao atualizar pagamento:', error);
+      alert('Erro ao atualizar estado de pagamento.');
+    }
+  };
+
   const handleDeleteSale = async (sale) => {
     if (!window.confirm('Tem a certeza que deseja anular esta venda? O stock será reposto.')) return;
 
@@ -81,7 +103,8 @@ export default function SalesHistory() {
       id: sale.id,
       created_at: sale.created_at.split('T')[0], 
       client_id: sale.client_id || '',
-      sale_channel: sale.sale_channel || 'Fisica'
+      sale_channel: sale.sale_channel || 'Fisica',
+      is_paid: sale.is_paid
     });
     setShowEditModal(true);
   };
@@ -94,7 +117,8 @@ export default function SalesHistory() {
         .update({
           created_at: editingSale.created_at,
           client_id: editingSale.client_id === '' ? null : editingSale.client_id,
-          sale_channel: editingSale.sale_channel
+          sale_channel: editingSale.sale_channel,
+          is_paid: editingSale.is_paid
         })
         .eq('id', editingSale.id);
 
@@ -107,7 +131,7 @@ export default function SalesHistory() {
     }
   };
 
-  // --- FUNÇÃO DE EXPORTAÇÃO (CORRIGIDA PARA EXCEL PORTUGUÊS) ---
+  // --- EXPORTAR CSV ---
   const handleExportCSV = () => {
     const salesToExport = sales.filter(sale => {
       if (!startDate && !endDate) return true;
@@ -126,20 +150,23 @@ export default function SalesHistory() {
 
     const headers = [
       "Data",
+      "Vendedor", 
       "Nome do Cliente",
       "Produto",
       "Quantidade",
       "Preço Unitário",
-      "Total"
+      "Total",
+      "Pago?" 
     ];
 
-    // MUDANÇA AQUI: Usamos ';' em vez de ',' para unir os campos
     const csvRows = [headers.join(';')];
 
     for (const sale of salesToExport) {
       const dateObj = new Date(sale.created_at);
       const dateStr = dateObj.toLocaleDateString('pt-PT');
       const clientName = sale.clients?.name || 'Cliente Final';
+      const sellerName = sale.seller_name || 'Admin';
+      const isPaidStr = sale.is_paid ? 'Sim' : 'Não';
 
       if (sale.sale_items && sale.sale_items.length > 0) {
         for (const item of sale.sale_items) {
@@ -148,13 +175,14 @@ export default function SalesHistory() {
 
           const row = [
             dateStr,
+            `"${sellerName}"`,
             `"${clientName}"`, 
             `"${productName}"`,
             item.quantity,
-            item.unit_price.toFixed(2).replace('.', ','), // Preço com vírgula (ex: 4,34)
-            lineTotal.toFixed(2).replace('.', ',')        // Total com vírgula
+            item.unit_price.toFixed(2).replace('.', ','),
+            lineTotal.toFixed(2).replace('.', ','),
+            isPaidStr
           ];
-          // MUDANÇA AQUI: join(';') garante que a vírgula do preço não parte a coluna
           csvRows.push(row.join(';'));
         }
       }
@@ -165,7 +193,7 @@ export default function SalesHistory() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Detalhe_Vendas_${startDate || 'inicio'}_ate_${endDate || 'hoje'}.csv`;
+    link.download = `Vendas_Detalhado_${startDate || 'inicio'}_ate_${endDate || 'hoje'}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -239,16 +267,17 @@ export default function SalesHistory() {
         </div>
 
         <div className="table-wrapper">
-          <table style={{minWidth: '950px'}}>
+          <table style={{minWidth: '1000px'}}>
             <thead>
               <tr>
                 <th style={{width: '40px'}}></th>
                 <th>Data</th>
                 <th>Canal</th>
-                <th>Vendedor</th>
+                {/* REMOVIDO: <th>Vendedor</th> */}
                 <th>Cliente</th>
                 <th>Total</th>
                 <th>Lucro</th>
+                <th>Pago</th> {/* MOVIDO PARA AQUI */}
                 <th>Ações</th>
               </tr>
             </thead>
@@ -286,14 +315,7 @@ export default function SalesHistory() {
                         )}
                       </td>
 
-                      <td>
-                        <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
-                          <User size={14} color="#64748b"/>
-                          <span style={{fontWeight: 500, color: '#334155'}}>
-                            {sale.seller_name || 'Admin'}
-                          </span>
-                        </div>
-                      </td>
+                      {/* REMOVIDO: Coluna Vendedor */}
 
                       <td>{sale.clients?.name || <span style={{color:'#94a3b8'}}>Cliente Final</span>}</td>
                       
@@ -301,6 +323,17 @@ export default function SalesHistory() {
                       
                       <td style={{color: sale.total_profit >= 0 ? '#10b981' : '#ef4444'}}>
                         {sale.total_profit >= 0 ? '+' : ''}€ {sale.total_profit.toFixed(2)}
+                      </td>
+
+                      {/* CHECKBOX DE PAGAMENTO MOVIDA PARA AQUI */}
+                      <td style={{textAlign: 'center'}} onClick={e => e.stopPropagation()}>
+                        <input 
+                          type="checkbox" 
+                          checked={sale.is_paid || false} 
+                          onChange={() => handleTogglePaid(sale, sale.is_paid)}
+                          style={{width:'16px', height:'16px', cursor:'pointer'}}
+                          title="Marcar como Pago/Não Pago"
+                        />
                       </td>
                       
                       <td>
@@ -328,9 +361,18 @@ export default function SalesHistory() {
                       <tr style={{background: '#f8fafc'}}>
                         <td colSpan="8" style={{padding: '0 20px 20px 20px'}}>
                           <div style={{background: 'white', borderRadius: '8px', padding: '15px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'}}>
-                            <h5 style={{margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px', color:'#475569'}}>
-                              <Package size={16}/> Itens da Venda
-                            </h5>
+                            
+                            {/* --- HEADER DOS DETALHES (COM VENDEDOR) --- */}
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                              <h5 style={{margin: '0', display: 'flex', alignItems: 'center', gap: '8px', color:'#475569'}}>
+                                <Package size={16}/> Itens da Venda
+                              </h5>
+                              <div style={{fontSize: '0.9rem', color: '#64748b', display:'flex', alignItems:'center', gap:'5px'}}>
+                                <User size={14}/>
+                                Vendedor: <span style={{color: '#334155', fontWeight: '600'}}>{sale.seller_name || 'Admin'}</span>
+                              </div>
+                            </div>
+
                             <table style={{width: '100%', fontSize: '0.9rem'}}>
                               <thead>
                                 <tr style={{background: '#f1f5f9'}}>
@@ -425,6 +467,17 @@ export default function SalesHistory() {
                   <option value="Fisica">🏢 Loja Física</option>
                   <option value="Shopify">🌐 Shopify</option>
                 </select>
+              </div>
+              
+              <div className="input-group" style={{marginTop:'15px', display: 'flex', alignItems: 'center', gap: '10px'}}>
+                <input 
+                  type="checkbox" 
+                  id="modal-paid"
+                  checked={editingSale.is_paid || false} 
+                  onChange={e => setEditingSale({...editingSale, is_paid: e.target.checked})}
+                  style={{width:'18px', height:'18px'}}
+                />
+                <label htmlFor="modal-paid" style={{margin:0, cursor:'pointer'}}>Marcar como Pago</label>
               </div>
 
               <button type="submit" className="save-btn" style={{marginTop:'20px'}}>
