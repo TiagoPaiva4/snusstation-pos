@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store, CheckCircle } from 'lucide-react';
 import '../styles/POS.css';
 
 export default function POS() {
@@ -23,8 +23,10 @@ export default function POS() {
   // Canal de Venda (Fisica ou Shopify)
   const [saleChannel, setSaleChannel] = useState('Fisica');
    
-  // Estado para o Modal de Novo Cliente
-  const [showModal, setShowModal] = useState(false);
+  // Modais
+  const [showModal, setShowModal] = useState(false); // Novo Cliente
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // Sucesso da Venda
+  
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', location: '' });
 
   const searchRef = useRef(null);
@@ -109,19 +111,14 @@ export default function POS() {
   };
 
   // --- PESQUISA INTELIGENTE DE PRODUTOS ---
-  // 1. Divide o texto escrito em palavras (tokens)
   const searchTokens = searchTerm.toLowerCase().split(' ').filter(token => token.trim() !== '');
 
   const filteredProducts = products.filter(p => {
-    // 2. Junta Nome e Marca numa só string para pesquisar
     const productText = `${p.name} ${p.brand || ''}`.toLowerCase();
-    
-    // 3. Verifica se TODAS as palavras escritas existem no produto
-    // (ex: "pablo pear" -> verifica se tem "pablo" E se tem "pear")
     return searchTokens.every(token => productText.includes(token));
   });
 
-  // Filtro de Clientes (para o dropdown)
+  // Filtro de Clientes
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(clientSearchTerm.toLowerCase())
   );
@@ -139,7 +136,6 @@ export default function POS() {
       const createdClient = data[0];
       setClients([...clients, createdClient].sort((a, b) => a.name.localeCompare(b.name)));
       
-      // Selecionar automaticamente
       setSelectedClient(createdClient.id);
       setClientSearchTerm(createdClient.name);
       
@@ -195,12 +191,21 @@ export default function POS() {
       await supabase.from('products').update({ stock: currentProduct.stock - item.qty }).eq('id', item.id);
     }
 
-    alert(`Venda (${saleChannel}) registada com sucesso!`);
+    // --- SUCESSO ---
+    // Limpar dados e mostrar Modal de Sucesso em vez de Alert
     setCart([]);
-    setSaleChannel('Fisica');
     setSelectedClient('');
     setClientSearchTerm('');
-    window.location.reload(); 
+    
+    // Mostrar a caixa estética
+    setShowSuccessModal(true);
+  };
+
+  // Função para fechar o modal e reiniciar
+  const closeSuccessModal = () => {
+    setShowSuccessModal(false);
+    setSaleChannel('Fisica');
+    window.location.reload(); // Recarregar para garantir dados frescos
   };
 
   const selectClientFromDropdown = (client) => {
@@ -238,7 +243,6 @@ export default function POS() {
                 }}
               />
               
-              {/* Dropdown de Clientes */}
               {showClientDropdown && (
                 <div style={{
                   position: 'absolute', top: '105%', left: 0, right: 0,
@@ -271,11 +275,7 @@ export default function POS() {
               )}
             </div>
 
-            <button 
-              className="add-client-btn" 
-              onClick={() => setShowModal(true)}
-              title="Criar Novo Cliente"
-            >
+            <button className="add-client-btn" onClick={() => setShowModal(true)} title="Criar Novo Cliente">
               <UserPlus size={18}/>
             </button>
           </div>
@@ -466,6 +466,38 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      {/* --- MODAL DE SUCESSO DA VENDA --- */}
+      {showSuccessModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth: '400px', textAlign: 'center', padding: '40px 30px'}}>
+            <div style={{marginBottom: '20px', display: 'flex', justifyContent: 'center'}}>
+              <CheckCircle size={80} color="#10b981" strokeWidth={1.5} />
+            </div>
+            
+            <h2 style={{fontSize: '1.6rem', color: '#0f172a', marginBottom: '10px'}}>Venda Registada!</h2>
+            
+            <p style={{color: '#64748b', marginBottom: '30px', fontSize: '1rem', lineHeight: '1.5'}}>
+              A venda foi guardada com sucesso no sistema.
+            </p>
+
+            <button 
+              onClick={closeSuccessModal}
+              className="save-btn" 
+              style={{
+                width: '100%', 
+                justifyContent: 'center', 
+                padding: '12px', 
+                fontSize: '1rem', 
+                background: '#10b981'
+              }}
+            >
+              Nova Venda
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
