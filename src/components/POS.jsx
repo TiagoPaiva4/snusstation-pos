@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store, ChevronDown } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, UserPlus, ShoppingCart, X, Gift, Globe, Store } from 'lucide-react';
 import '../styles/POS.css';
 
 export default function POS() {
@@ -15,8 +15,8 @@ export default function POS() {
   
   // Cliente e Pesquisa de Cliente
   const [selectedClient, setSelectedClient] = useState('');
-  const [clientSearchTerm, setClientSearchTerm] = useState(''); // <--- NOVO: Texto da pesquisa de cliente
-  const [showClientDropdown, setShowClientDropdown] = useState(false); // <--- NOVO: Controlar dropdown de clientes
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
 
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   
@@ -28,19 +28,16 @@ export default function POS() {
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', location: '' });
 
   const searchRef = useRef(null);
-  const clientRef = useRef(null); // <--- NOVO: Ref para fechar dropdown de clientes
+  const clientRef = useRef(null);
 
   // --- EFEITOS ---
   useEffect(() => {
     fetchData();
 
-    // Função para fechar dropdowns ao clicar fora
     const handleClickOutside = (e) => {
-      // Fechar pesquisa de produtos
       if (searchRef.current && !searchRef.current.contains(e.target)) {
         setShowResults(false);
       }
-      // Fechar pesquisa de clientes
       if (clientRef.current && !clientRef.current.contains(e.target)) {
         setShowClientDropdown(false);
       }
@@ -111,9 +108,18 @@ export default function POS() {
     }, 0);
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // --- PESQUISA INTELIGENTE DE PRODUTOS ---
+  // 1. Divide o texto escrito em palavras (tokens)
+  const searchTokens = searchTerm.toLowerCase().split(' ').filter(token => token.trim() !== '');
+
+  const filteredProducts = products.filter(p => {
+    // 2. Junta Nome e Marca numa só string para pesquisar
+    const productText = `${p.name} ${p.brand || ''}`.toLowerCase();
+    
+    // 3. Verifica se TODAS as palavras escritas existem no produto
+    // (ex: "pablo pear" -> verifica se tem "pablo" E se tem "pear")
+    return searchTokens.every(token => productText.includes(token));
+  });
 
   // Filtro de Clientes (para o dropdown)
   const filteredClients = clients.filter(c => 
@@ -133,9 +139,9 @@ export default function POS() {
       const createdClient = data[0];
       setClients([...clients, createdClient].sort((a, b) => a.name.localeCompare(b.name)));
       
-      // Selecionar automaticamente o novo cliente
+      // Selecionar automaticamente
       setSelectedClient(createdClient.id);
-      setClientSearchTerm(createdClient.name); // Preencher o input
+      setClientSearchTerm(createdClient.name);
       
       setShowModal(false);
       setNewClient({ name: '', email: '', phone: '', location: '' });
@@ -197,7 +203,6 @@ export default function POS() {
     window.location.reload(); 
   };
 
-  // Selecionar cliente da lista
   const selectClientFromDropdown = (client) => {
     setSelectedClient(client.id);
     setClientSearchTerm(client.name);
@@ -207,7 +212,7 @@ export default function POS() {
   return (
     <div className="pos-wrapper">
        
-      {/* ÁREA DE CLIENTE (AGORA COM PESQUISA) */}
+      {/* ÁREA DE CLIENTE */}
       <div className="pos-area-client">
         <div className="sidebar-card client-card">
           <label>Cliente da Venda</label>
@@ -221,7 +226,7 @@ export default function POS() {
                 onChange={(e) => {
                   setClientSearchTerm(e.target.value);
                   setShowClientDropdown(true);
-                  if(e.target.value === '') setSelectedClient(''); // Limpar seleção se apagar texto
+                  if(e.target.value === '') setSelectedClient('');
                 }}
                 onFocus={() => setShowClientDropdown(true)}
                 style={{
@@ -233,7 +238,7 @@ export default function POS() {
                 }}
               />
               
-              {/* Dropdown de Resultados de Clientes */}
+              {/* Dropdown de Clientes */}
               {showClientDropdown && (
                 <div style={{
                   position: 'absolute', top: '105%', left: 0, right: 0,
@@ -284,7 +289,7 @@ export default function POS() {
             <Search className="search-icon" size={20} />
             <input 
               type="text" 
-              placeholder="Pesquisar produto..." 
+              placeholder="Pesquisar produto" 
               value={searchTerm}
               onFocus={() => setShowResults(true)}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -302,6 +307,7 @@ export default function POS() {
                       </div>
                       <div className="result-info">
                         <span className="result-name">{p.name}</span>
+                        <span style={{fontSize:'0.75rem', color:'#64748b'}}>{p.brand}</span>
                       </div>
                     </div>
                     <span className="result-price">€{p.sell_price.toFixed(2)}</span>
@@ -322,7 +328,6 @@ export default function POS() {
               <span className="item-count">{cart.length} itens</span>
             </div>
 
-            {/* SELETOR DE CANAL */}
             <div style={{background:'#f1f5f9', padding:'3px', borderRadius:'8px', display:'flex', gap:'5px'}}>
               <button 
                 onClick={() => setSaleChannel('Fisica')}
